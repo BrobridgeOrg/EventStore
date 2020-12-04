@@ -19,16 +19,24 @@ func NewOptions() *Options {
 
 	blockBasedTableOptions := gorocksdb.NewDefaultBlockBasedTableOptions()
 	blockBasedTableOptions.SetBlockSizeDeviation(5)
-	blockBasedTableOptions.SetBlockSize(32 * 1024)
+	blockBasedTableOptions.SetBlockSize(4 * 1024)
 	blockBasedTableOptions.SetCacheIndexAndFilterBlocks(true)
 	blockBasedTableOptions.SetCacheIndexAndFilterBlocksWithHighPriority(true)
 	blockBasedTableOptions.SetPinL0FilterAndIndexBlocksInCache(true)
-	//	blockBasedTableOptions.SetIndexType(gorocksdb.KHashSearchIndexType)
+	//blockBasedTableOptions.SetIndexType(gorocksdb.KHashSearchIndexType)
 	options.SetBlockBasedTableFactory(blockBasedTableOptions)
 
 	env := gorocksdb.NewDefaultEnv()
 	env.SetBackgroundThreads(4)
 	options.SetMaxBackgroundCompactions(4)
+	options.SetTargetFileSizeBase(64 * 1024 * 1024)
+	options.SetMaxWriteBufferNumber(3)
+	options.SetLevel0FileNumCompactionTrigger(8)
+	options.SetLevel0SlowdownWritesTrigger(17)
+	options.SetLevel0StopWritesTrigger(24)
+	options.SetMaxBytesForLevelBase(512 * 1024 * 1024)
+	options.SetMaxBytesForLevelMultiplier(8)
+	options.SetMaxOpenFiles(-1)
 	options.SetEnv(env)
 
 	return &Options{
