@@ -51,6 +51,22 @@ func NewStore(eventstore *EventStore, storeName string) (*Store, error) {
 		return nil, err
 	}
 
+	// Initializing snapshot
+	if eventstore.options.EnabledSnapshot {
+
+		// Assert snapshot
+		_, err := store.assertColumnFamily("snapshot")
+		if err != nil {
+			return nil, err
+		}
+
+		// Assert snapshot states
+		_, err = store.assertColumnFamily("snapshot_states")
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return store, nil
 }
 
@@ -201,6 +217,9 @@ func (store *Store) Write(data []byte) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
+
+	// Take snapshot
+	store.eventstore.TakeSnapshot(store, seq, data)
 
 	// Dispatch event to subscribers
 	store.DispatchEvent()

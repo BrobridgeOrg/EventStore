@@ -3,8 +3,10 @@ package eventstore
 import "github.com/tecbot/gorocksdb"
 
 type Options struct {
-	DatabasePath   string
-	RocksdbOptions *gorocksdb.Options
+	DatabasePath    string
+	EnabledSnapshot bool
+	RocksdbOptions  *gorocksdb.Options
+	SnapshotOptions *SnapshotOptions
 }
 
 func NewOptions() *Options {
@@ -40,6 +42,8 @@ func NewOptions() *Options {
 	options.SetEnv(env)
 
 	return &Options{
-		RocksdbOptions: options,
+		EnabledSnapshot: false,
+		RocksdbOptions:  options,
+		SnapshotOptions: NewSnapshotOptions(),
 	}
 }

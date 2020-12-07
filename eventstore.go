@@ -5,9 +5,10 @@ import (
 )
 
 type EventStore struct {
-	dbPath  string
-	stores  map[string]*Store
-	options *Options
+	options  *Options
+	dbPath   string
+	stores   map[string]*Store
+	snapshot *SnapshotController
 }
 
 func CreateEventStore(options *Options) (*EventStore, error) {
@@ -17,10 +18,36 @@ func CreateEventStore(options *Options) (*EventStore, error) {
 		return nil, err
 	}
 
-	return &EventStore{
+	eventStore := &EventStore{
 		stores:  make(map[string]*Store),
 		options: options,
-	}, nil
+	}
+
+	if options.EnabledSnapshot {
+		eventStore.initializeSnapshotController()
+	}
+
+	return eventStore, nil
+}
+
+func (eventstore *EventStore) initializeSnapshotController() error {
+	eventstore.snapshot = NewSnapshotController(eventstore.options.SnapshotOptions)
+	return nil
+}
+
+func (eventstore *EventStore) Close() {
+	for _, store := range eventstore.stores {
+		store.Close()
+	}
+}
+
+func (eventstore *EventStore) SetSnapshotHandler(fn func(*SnapshotRequest) error) {
+
+	if eventstore.snapshot == nil {
+		return
+	}
+
+	eventstore.snapshot.SetHandler(fn)
 }
 
 func (eventstore *EventStore) GetStore(storeName string) (*Store, error) {
@@ -38,4 +65,13 @@ func (eventstore *EventStore) GetStore(storeName string) (*Store, error) {
 	eventstore.stores[storeName] = store
 
 	return store, nil
+}
+
+func (eventstore *EventStore) TakeSnapshot(store *Store, seq uint64, data []byte) error {
+
+	if eventstore.snapshot == nil {
+		return nil
+	}
+
+	return eventstore.snapshot.Request(store, seq, data)
 }

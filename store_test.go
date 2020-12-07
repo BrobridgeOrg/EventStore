@@ -6,14 +6,12 @@ import (
 	"testing"
 )
 
-func init() {
-	createTestEventStore("testing")
-}
-
 func TestWrite(t *testing.T) {
 
+	createTestEventStore("testing", false)
+	defer closeTestEventStore()
+
 	store := createTestStore()
-	defer store.Close()
 
 	if _, err := store.Write([]byte("Benchmark")); err != nil {
 		t.Error(err)
@@ -22,8 +20,10 @@ func TestWrite(t *testing.T) {
 
 func TestSubscription(t *testing.T) {
 
+	createTestEventStore("testing", false)
+	defer closeTestEventStore()
+
 	store := createTestStore()
-	defer store.Close()
 
 	var wg sync.WaitGroup
 
@@ -51,8 +51,10 @@ func TestSubscription(t *testing.T) {
 
 func TestSubscriptionWithDurableName(t *testing.T) {
 
+	createTestEventStore("testing", false)
+	defer closeTestEventStore()
+
 	store := createTestStore()
-	defer store.Close()
 
 	var wg sync.WaitGroup
 	var lastSeq uint64 = 0

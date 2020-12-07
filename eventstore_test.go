@@ -9,7 +9,7 @@ import (
 var testEventstore *EventStore
 var testCounter int32
 
-func createTestEventStore(name string) {
+func createTestEventStore(name string, enabledSnapshot bool) {
 
 	err := os.RemoveAll("./" + name)
 	if err != nil {
@@ -18,6 +18,7 @@ func createTestEventStore(name string) {
 
 	options := NewOptions()
 	options.DatabasePath = "./" + name
+	options.EnabledSnapshot = enabledSnapshot
 
 	eventstore, err := CreateEventStore(options)
 	if err != nil {
@@ -25,6 +26,10 @@ func createTestEventStore(name string) {
 	}
 
 	testEventstore = eventstore
+}
+
+func closeTestEventStore() {
+	testEventstore.Close()
 }
 
 func createTestStore() *Store {

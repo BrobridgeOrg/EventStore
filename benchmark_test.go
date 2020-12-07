@@ -5,14 +5,12 @@ import (
 	"testing"
 )
 
-func init() {
-	createTestEventStore("bench")
-}
-
 func BenchmarkWrite(b *testing.B) {
 
+	createTestEventStore("bench", false)
+	defer closeTestEventStore()
+
 	store := createTestStore()
-	defer store.Close()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -22,10 +20,12 @@ func BenchmarkWrite(b *testing.B) {
 	}
 }
 
-func BenchmarkThroughput(b *testing.B) {
+func BenchmarkEventThroughput(b *testing.B) {
+
+	createTestEventStore("bench", false)
+	defer closeTestEventStore()
 
 	store := createTestStore()
-	defer store.Close()
 
 	var wg sync.WaitGroup
 
@@ -37,6 +37,44 @@ func BenchmarkThroughput(b *testing.B) {
 	if err != nil {
 		panic(err)
 	}
+
+	wg.Add(b.N)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := store.Write([]byte("Benchmark")); err != nil {
+			panic(err)
+		}
+	}
+
+	wg.Wait()
+}
+
+func BenchmarkSnapshotThroughput(b *testing.B) {
+
+	createTestEventStore("bench", true)
+	defer closeTestEventStore()
+
+	store := createTestStore()
+
+	var wg sync.WaitGroup
+
+	// Setup snapshot handler
+	testEventstore.SetSnapshotHandler(func(request *SnapshotRequest) error {
+
+		err := request.Upsert([]byte("testing"), []byte("testing_key"), func(origin []byte) ([]byte, error) {
+
+			// Replace old data directly
+			return origin, nil
+		})
+
+		if err != nil {
+			b.Error(err)
+		}
+
+		wg.Done()
+
+		return nil
+	})
 
 	wg.Add(b.N)
 	b.ResetTimer()
