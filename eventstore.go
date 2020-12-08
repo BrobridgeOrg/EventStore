@@ -39,6 +39,8 @@ func (eventstore *EventStore) Close() {
 	for _, store := range eventstore.stores {
 		store.Close()
 	}
+
+	eventstore.stores = make(map[string]*Store)
 }
 
 func (eventstore *EventStore) SetSnapshotHandler(fn func(*SnapshotRequest) error) {
