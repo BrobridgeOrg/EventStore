@@ -35,6 +35,10 @@ func (eventstore *EventStore) initializeSnapshotController() error {
 	return nil
 }
 
+func (eventstore *EventStore) UnregisterStore(name string) {
+	delete(eventstore.stores, name)
+}
+
 func (eventstore *EventStore) Close() {
 	for _, store := range eventstore.stores {
 		store.Close()

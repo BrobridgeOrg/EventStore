@@ -120,6 +120,7 @@ func (store *Store) Close() {
 	})
 
 	store.db.Close()
+	store.eventstore.UnregisterStore(store.name)
 }
 
 func (store *Store) assertColumnFamily(name string) (*gorocksdb.ColumnFamilyHandle, error) {

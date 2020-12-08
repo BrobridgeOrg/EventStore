@@ -59,7 +59,7 @@ func TestSubscriptionOffset(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Subscription to store
-	sub, err := store.Subscribe(store.name, 0, func(event *Event) {
+	_, err := store.Subscribe(store.name, 0, func(event *Event) {
 		//		t.Logf("%d %s", seq, string(data))
 		event.Ack()
 
@@ -79,7 +79,16 @@ func TestSubscriptionOffset(t *testing.T) {
 	}()
 
 	wg.Wait()
-	sub.Close()
+
+	// Release current store
+	storeName := store.name
+	store.Close()
+
+	// Re-open store
+	store, err = testEventstore.GetStore(storeName)
+	if err != nil {
+		panic(err)
+	}
 
 	// Open store again
 	createTestEventStore("testing", false)
@@ -102,7 +111,7 @@ func TestSubscriptionOffset(t *testing.T) {
 
 	// Subscription to store
 	_, err = store.Subscribe(store.name, 50, func(event *Event) {
-		//		t.Logf("%d %s", event.Sequence, string(event.Data))
+		//t.Logf("%d %s", event.Sequence, string(event.Data))
 		event.Ack()
 
 		wg.Done()

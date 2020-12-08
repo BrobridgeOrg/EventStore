@@ -129,6 +129,7 @@ func (sub *Subscription) handle(seq uint64, data []byte) {
 func (sub *Subscription) updateDurableOffset() {
 
 	for !sub.isClosed {
+
 		// Update offset for this durable name
 		err := sub.store.UpdateDurableState(sub.durableName, sub.lastSequence)
 		if err == nil {
