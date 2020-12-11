@@ -107,8 +107,8 @@ func (sub *Subscription) handle(seq uint64, data []byte) {
 	event.Sequence = seq
 	event.Data = data
 
-	defer event.reset()
 	defer eventPool.Put(event)
+	defer event.reset()
 
 	sub.watchFn(event)
 
