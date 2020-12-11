@@ -79,21 +79,11 @@ func (request *SnapshotRequest) Upsert(collection []byte, key []byte, fn func(or
 	return request.write(collection, snapshotKey, newData)
 }
 
-func (request *SnapshotRequest) Delete(collection []byte, key []byte) error {
-
-	cfHandle, err := request.Store.GetColumnFamailyHandle("snapshot")
-	if err != nil {
-		return errors.New("Not found \"snapshot\" column family")
-	}
+func (request *SnapshotRequest) UpdateDurableState(collection []byte) error {
 
 	stateHandle, err := request.Store.GetColumnFamailyHandle("snapshot_states")
 	if err != nil {
 		return errors.New("Not found \"snapshot_states\" column family")
-	}
-
-	err = request.Store.db.DeleteCF(request.Store.wo, cfHandle, key)
-	if err != nil {
-		return err
 	}
 
 	// Update snapshot state
@@ -110,16 +100,29 @@ func (request *SnapshotRequest) Delete(collection []byte, key []byte) error {
 	return nil
 }
 
-func (request *SnapshotRequest) write(collection []byte, key []byte, data []byte) error {
+func (request *SnapshotRequest) Delete(collection []byte, key []byte) error {
 
 	cfHandle, err := request.Store.GetColumnFamailyHandle("snapshot")
 	if err != nil {
 		return errors.New("Not found \"snapshot\" column family")
 	}
 
-	stateHandle, err := request.Store.GetColumnFamailyHandle("snapshot_states")
+	err = request.Store.db.DeleteCF(request.Store.wo, cfHandle, key)
 	if err != nil {
-		return errors.New("Not found \"snapshot_states\" column family")
+		return err
+	}
+
+	// Update snapshot state
+	request.UpdateDurableState(collection)
+
+	return nil
+}
+
+func (request *SnapshotRequest) write(collection []byte, key []byte, data []byte) error {
+
+	cfHandle, err := request.Store.GetColumnFamailyHandle("snapshot")
+	if err != nil {
+		return errors.New("Not found \"snapshot\" column family")
 	}
 
 	// Write to database
@@ -129,15 +132,7 @@ func (request *SnapshotRequest) write(collection []byte, key []byte, data []byte
 	}
 
 	// Update snapshot state
-	seqData := Uint64ToBytes(request.Sequence)
-	lastSequenceKey := bytes.Join([][]byte{
-		collection,
-		[]byte("seq"),
-	}, []byte("-"))
-	err = request.Store.db.PutCF(request.Store.wo, stateHandle, lastSequenceKey, seqData)
-	if err != nil {
-		return err
-	}
+	request.UpdateDurableState(collection)
 
 	return nil
 }

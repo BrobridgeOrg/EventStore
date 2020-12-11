@@ -65,6 +65,12 @@ func NewStore(eventstore *EventStore, storeName string) (*Store, error) {
 		if err != nil {
 			return nil, err
 		}
+
+		// Recovery snapshot requests which is still pending
+		err = store.eventstore.RecoverSnapshot(store)
+		if err != nil {
+			return store, err
+		}
 	}
 
 	return store, nil

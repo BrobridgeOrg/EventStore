@@ -81,3 +81,12 @@ func (eventstore *EventStore) TakeSnapshot(store *Store, seq uint64, data []byte
 
 	return eventstore.snapshot.Request(store, seq, data)
 }
+
+func (eventstore *EventStore) RecoverSnapshot(store *Store) error {
+
+	if eventstore.snapshot == nil {
+		return nil
+	}
+
+	return eventstore.snapshot.RecoverSnapshot(store)
+}
