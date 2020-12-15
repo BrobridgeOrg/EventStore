@@ -49,7 +49,7 @@ func BenchmarkEventThroughput(b *testing.B) {
 	wg.Wait()
 }
 
-func BenchmarkSnapshotThroughput(b *testing.B) {
+func BenchmarkSnapshotPerformance(b *testing.B) {
 
 	createTestEventStore("bench", true)
 	defer closeTestEventStore()

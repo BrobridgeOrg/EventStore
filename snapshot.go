@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"sync"
+
+	"github.com/tecbot/gorocksdb"
 )
 
 type SnapshotRequest struct {
@@ -79,7 +81,7 @@ func (request *SnapshotRequest) Upsert(collection []byte, key []byte, fn func(or
 	return request.write(collection, snapshotKey, newData)
 }
 
-func (request *SnapshotRequest) UpdateDurableState(collection []byte) error {
+func (request *SnapshotRequest) updateDurableState(batch *gorocksdb.WriteBatch, collection []byte) error {
 
 	stateHandle, err := request.Store.GetColumnFamailyHandle("snapshot_states")
 	if err != nil {
@@ -92,12 +94,21 @@ func (request *SnapshotRequest) UpdateDurableState(collection []byte) error {
 		collection,
 		[]byte("seq"),
 	}, []byte("-"))
-	err = request.Store.db.PutCF(request.Store.wo, stateHandle, lastSequenceKey, seqData)
-	if err != nil {
-		return err
+
+	if batch == nil {
+		err = request.Store.db.PutCF(request.Store.wo, stateHandle, lastSequenceKey, seqData)
+		if err != nil {
+			return err
+		}
+	} else {
+		batch.PutCF(stateHandle, lastSequenceKey, seqData)
 	}
 
 	return nil
+}
+
+func (request *SnapshotRequest) UpdateDurableState(collection []byte) error {
+	return request.updateDurableState(nil, collection)
 }
 
 func (request *SnapshotRequest) Delete(collection []byte, key []byte) error {
@@ -107,13 +118,20 @@ func (request *SnapshotRequest) Delete(collection []byte, key []byte) error {
 		return errors.New("Not found \"snapshot\" column family")
 	}
 
-	err = request.Store.db.DeleteCF(request.Store.wo, cfHandle, key)
+	batch := gorocksdb.NewWriteBatch()
+	batch.DeleteCF(cfHandle, key)
+
+	// Update snapshot state
+	err = request.updateDurableState(batch, collection)
 	if err != nil {
 		return err
 	}
 
-	// Update snapshot state
-	request.UpdateDurableState(collection)
+	// Write to database
+	err = request.Store.db.Write(request.Store.wo, batch)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -125,14 +143,20 @@ func (request *SnapshotRequest) write(collection []byte, key []byte, data []byte
 		return errors.New("Not found \"snapshot\" column family")
 	}
 
-	// Write to database
-	err = request.Store.db.PutCF(request.Store.wo, cfHandle, key, data)
+	batch := gorocksdb.NewWriteBatch()
+	batch.PutCF(cfHandle, key, data)
+
+	// Update snapshot state
+	err = request.updateDurableState(batch, collection)
 	if err != nil {
 		return err
 	}
 
-	// Update snapshot state
-	request.UpdateDurableState(collection)
+	// Write to database
+	err = request.Store.db.Write(request.Store.wo, batch)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
