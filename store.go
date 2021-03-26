@@ -337,6 +337,52 @@ func (store *Store) Subscribe(durableName string, startAt uint64, fn StoreHandle
 	return sub, nil
 }
 
+func (store *Store) Fetch(startAt uint64, count int) ([]*Event, error) {
+
+	cfHandle, err := store.GetColumnFamailyHandle("events")
+	if err != nil {
+		return nil, errors.New("Not found \"events\" column family")
+	}
+
+	// Initializing iterator
+	ro := gorocksdb.NewDefaultReadOptions()
+	ro.SetFillCache(false)
+	ro.SetTailing(true)
+	iter := store.db.NewIteratorCF(ro, cfHandle)
+	if iter.Err() != nil {
+		return nil, iter.Err()
+	}
+
+	iter.Seek(Uint64ToBytes(startAt))
+
+	events := make([]*Event, 0, count)
+
+	for i := 0; i < count && iter.Valid(); i++ {
+
+		// Getting sequence number
+		key := iter.Key()
+		seq := BytesToUint64(key.Data())
+		key.Free()
+
+		// Value
+		value := iter.Value()
+		data := make([]byte, len(value.Data()))
+		copy(data, value.Data())
+		value.Free()
+
+		// Create event
+		event := NewEvent()
+		event.Sequence = seq
+		event.Data = data
+
+		events = append(events, event)
+
+		iter.Next()
+	}
+
+	return events, nil
+}
+
 func (store *Store) watch(sub *Subscription) {
 
 	// Start watching event store
