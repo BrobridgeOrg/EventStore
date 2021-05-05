@@ -337,7 +337,7 @@ func (store *Store) Subscribe(durableName string, startAt uint64, fn StoreHandle
 	return sub, nil
 }
 
-func (store *Store) Fetch(startAt uint64, count int) ([]*Event, error) {
+func (store *Store) Fetch(startAt uint64, offset uint64, count int) ([]*Event, error) {
 
 	cfHandle, err := store.GetColumnFamailyHandle("events")
 	if err != nil {
@@ -357,12 +357,19 @@ func (store *Store) Fetch(startAt uint64, count int) ([]*Event, error) {
 
 	events := make([]*Event, 0, count)
 
+	offsetCounter := offset
 	for i := 0; i < count && iter.Valid(); i++ {
 
 		// Getting sequence number
 		key := iter.Key()
 		seq := BytesToUint64(key.Data())
 		key.Free()
+
+		if offsetCounter > 0 {
+			offsetCounter--
+			iter.Next()
+			continue
+		}
 
 		// Value
 		value := iter.Value()
