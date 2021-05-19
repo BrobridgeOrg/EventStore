@@ -339,6 +339,12 @@ func (store *Store) Subscribe(durableName string, startAt uint64, fn StoreHandle
 
 func (store *Store) Fetch(startAt uint64, offset uint64, count int) ([]*Event, error) {
 
+	events := make([]*Event, 0, count)
+
+	if startAt+offset >= store.counter.Count() {
+		return events, nil
+	}
+
 	cfHandle, err := store.GetColumnFamailyHandle("events")
 	if err != nil {
 		return nil, errors.New("Not found \"events\" column family")
@@ -354,8 +360,6 @@ func (store *Store) Fetch(startAt uint64, offset uint64, count int) ([]*Event, e
 	}
 
 	iter.Seek(Uint64ToBytes(startAt))
-
-	events := make([]*Event, 0, count)
 
 	offsetCounter := offset
 	for i := 0; i < count && iter.Valid(); i++ {
