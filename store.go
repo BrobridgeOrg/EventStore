@@ -394,6 +394,10 @@ func (store *Store) Fetch(startAt uint64, offset uint64, count int) ([]*Event, e
 	return events, nil
 }
 
+func (store *Store) CreateSnapshotView() *SnapshotView {
+	return NewSnapshotView(store)
+}
+
 func (store *Store) watch(sub *Subscription) {
 
 	// Start watching event store
