@@ -391,6 +391,8 @@ func (store *Store) Fetch(startAt uint64, offset uint64, count int) ([]*Event, e
 		iter.Next()
 	}
 
+	iter.Close()
+
 	return events, nil
 }
 
