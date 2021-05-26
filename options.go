@@ -21,7 +21,7 @@ func NewOptions() *Options {
 
 	blockBasedTableOptions := gorocksdb.NewDefaultBlockBasedTableOptions()
 	blockBasedTableOptions.SetBlockSizeDeviation(5)
-	blockBasedTableOptions.SetBlockSize(4 * 1024)
+	blockBasedTableOptions.SetBlockSize(32 * 1024)
 	blockBasedTableOptions.SetCacheIndexAndFilterBlocks(true)
 	blockBasedTableOptions.SetCacheIndexAndFilterBlocksWithHighPriority(true)
 	blockBasedTableOptions.SetPinL0FilterAndIndexBlocksInCache(true)
