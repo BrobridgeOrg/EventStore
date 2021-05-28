@@ -59,8 +59,13 @@ func (sv *SnapshotView) Fetch(collection []byte, key []byte, offset uint64, coun
 
 	iter.Seek(snapshotKey)
 
+	prefix := snapshotKey[0 : len(snapshotKey)-len(key)]
 	offsetCounter := offset
 	for i := 0; i < count && iter.Valid(); i++ {
+
+		if !iter.ValidForPrefix(prefix) {
+			break
+		}
 
 		// Getting sequence number
 		key := iter.Key()
