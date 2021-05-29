@@ -33,9 +33,9 @@ func (sv *SnapshotView) Release() error {
 	return nil
 }
 
-func (sv *SnapshotView) Fetch(collection []byte, key []byte, offset uint64, count int) ([]*Event, error) {
+func (sv *SnapshotView) Fetch(collection []byte, key []byte, offset uint64, count int) ([]*Record, error) {
 
-	events := make([]*Event, 0, count)
+	records := make([]*Record, 0, count)
 
 	cfHandle, err := sv.store.GetColumnFamailyHandle("snapshot")
 	if err != nil {
@@ -67,9 +67,10 @@ func (sv *SnapshotView) Fetch(collection []byte, key []byte, offset uint64, coun
 			break
 		}
 
-		// Getting sequence number
+		// Getting key
 		key := iter.Key()
-		seq := BytesToUint64(key.Data())
+		recordKey := make([]byte, len(key.Data())-len(prefix))
+		copy(recordKey, key.Data()[len(prefix):])
 		key.Free()
 
 		if offsetCounter > 0 {
@@ -84,15 +85,15 @@ func (sv *SnapshotView) Fetch(collection []byte, key []byte, offset uint64, coun
 		copy(data, value.Data())
 		value.Free()
 
-		// Create event
-		event := NewEvent()
-		event.Sequence = seq
-		event.Data = data
+		// Preparing record
+		record := NewRecord()
+		record.Key = recordKey
+		record.Data = data
 
-		events = append(events, event)
+		records = append(records, record)
 
 		iter.Next()
 	}
 
-	return events, nil
+	return records, nil
 }
