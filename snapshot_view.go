@@ -95,5 +95,7 @@ func (sv *SnapshotView) Fetch(collection []byte, key []byte, offset uint64, coun
 		iter.Next()
 	}
 
+	iter.Close()
+
 	return records, nil
 }

@@ -124,14 +124,18 @@ func (request *SnapshotRequest) Delete(collection []byte, key []byte) error {
 	// Update snapshot state
 	err = request.updateDurableState(batch, collection)
 	if err != nil {
+		batch.Destroy()
 		return err
 	}
 
 	// Write to database
 	err = request.Store.db.Write(request.Store.wo, batch)
 	if err != nil {
+		batch.Destroy()
 		return err
 	}
+
+	batch.Destroy()
 
 	return nil
 }
@@ -149,14 +153,18 @@ func (request *SnapshotRequest) write(collection []byte, key []byte, data []byte
 	// Update snapshot state
 	err = request.updateDurableState(batch, collection)
 	if err != nil {
+		batch.Destroy()
 		return err
 	}
 
 	// Write to database
 	err = request.Store.db.Write(request.Store.wo, batch)
 	if err != nil {
+		batch.Destroy()
 		return err
 	}
+
+	batch.Destroy()
 
 	return nil
 }
