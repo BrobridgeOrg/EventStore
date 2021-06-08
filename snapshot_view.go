@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"errors"
 
-	"github.com/tecbot/gorocksdb"
+	"github.com/cockroachdb/pebble"
 )
 
 type SnapshotView struct {
 	store          *Store
-	nativeSnapshot *gorocksdb.Snapshot
+	nativeSnapshot *pebble.Snapshot
 }
 
 func NewSnapshotView(store *Store) *SnapshotView {
@@ -20,14 +20,19 @@ func NewSnapshotView(store *Store) *SnapshotView {
 
 func (sv *SnapshotView) Initialize() error {
 
-	sv.nativeSnapshot = sv.store.db.NewSnapshot()
+	cfHandle, err := sv.store.GetColumnFamailyHandle("snapshot")
+	if err != nil {
+		return errors.New("Not found \"snapshot\" column family")
+	}
+
+	sv.nativeSnapshot = cfHandle.Db.NewSnapshot()
 
 	return nil
 }
 
 func (sv *SnapshotView) Release() error {
 	if sv.nativeSnapshot != nil {
-		sv.store.db.ReleaseSnapshot(sv.nativeSnapshot)
+		sv.nativeSnapshot.Close()
 	}
 
 	return nil
@@ -37,41 +42,43 @@ func (sv *SnapshotView) Fetch(collection []byte, key []byte, offset uint64, coun
 
 	records := make([]*Record, 0, count)
 
-	cfHandle, err := sv.store.GetColumnFamailyHandle("snapshot")
-	if err != nil {
-		return nil, errors.New("Not found \"snapshot\" column family")
+	keyUpperBound := func(b []byte) []byte {
+		end := make([]byte, len(b))
+		copy(end, b)
+		for i := len(end) - 1; i >= 0; i-- {
+			end[i] = end[i] + 1
+			if end[i] != 0 {
+				return end[:i+1]
+			}
+		}
+		return nil // no upper-bound
 	}
 
-	// Initializing iterator
-	ro := gorocksdb.NewDefaultReadOptions()
-	ro.SetFillCache(false)
-	ro.SetTailing(true)
-	ro.SetSnapshot(sv.nativeSnapshot)
-	iter := sv.store.db.NewIteratorCF(ro, cfHandle)
-	if iter.Err() != nil {
-		return nil, iter.Err()
+	prefixIterOptions := func(prefix []byte) *pebble.IterOptions {
+		return &pebble.IterOptions{
+			LowerBound: prefix,
+			UpperBound: keyUpperBound(prefix),
+		}
 	}
 
+	// Prepare snapshot key
 	snapshotKey := bytes.Join([][]byte{
 		collection,
 		key,
 	}, []byte("-"))
-
-	iter.Seek(snapshotKey)
-
 	prefix := snapshotKey[0 : len(snapshotKey)-len(key)]
+
+	// Create Iterator
+	iter := sv.nativeSnapshot.NewIter(prefixIterOptions(prefix))
+
+	// Seek
+	iter.SeekGE(snapshotKey)
 	offsetCounter := offset
 	for i := 0; i < count && iter.Valid(); i++ {
 
-		if !iter.ValidForPrefix(prefix) {
-			break
-		}
-
 		// Getting key
-		key := iter.Key()
-		recordKey := make([]byte, len(key.Data())-len(prefix))
-		copy(recordKey, key.Data()[len(prefix):])
-		key.Free()
+		recordKey := make([]byte, len(iter.Key())-len(prefix))
+		copy(recordKey, iter.Key()[len(prefix):])
 
 		if offsetCounter > 0 {
 			offsetCounter--
@@ -80,10 +87,8 @@ func (sv *SnapshotView) Fetch(collection []byte, key []byte, offset uint64, coun
 		}
 
 		// Value
-		value := iter.Value()
-		data := make([]byte, len(value.Data()))
-		copy(data, value.Data())
-		value.Free()
+		data := make([]byte, len(iter.Value()))
+		copy(data, iter.Value())
 
 		// Preparing record
 		record := NewRecord()

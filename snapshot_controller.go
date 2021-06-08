@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/cfsghost/gosharding"
-	"github.com/tecbot/gorocksdb"
+	"github.com/cockroachdb/pebble"
 )
 
 type SnapshotController struct {
@@ -83,7 +83,7 @@ func (ss *SnapshotController) updateSnapshotState(req *SnapshotRequest) error {
 
 	// Update snapshot state
 	seqData := Uint64ToBytes(req.Sequence)
-	err = req.Store.db.PutCF(req.Store.wo, stateHandle, []byte("_state"), seqData)
+	err = stateHandle.Db.Set([]byte("_state"), seqData, pebble.Sync)
 	if err != nil {
 		return err
 	}
@@ -115,61 +115,48 @@ func (ss *SnapshotController) RecoverSnapshot(store *Store) error {
 		return errors.New("Not found \"snapshot_states\" column family")
 	}
 
-	value, err := store.db.GetCF(store.ro, stateHandle, []byte("_state"))
+	value, closer, err := stateHandle.Db.Get([]byte("_state"))
 	if err != nil {
+		if err == pebble.ErrNotFound {
+			return nil
+		}
+
 		return err
 	}
 
-	// Nothing to do recovery
-	if value.Size() == 0 {
-		value.Free()
-		return nil
-	}
+	defer closer.Close()
 
 	cfHandle, err := store.GetColumnFamailyHandle("events")
 	if err != nil {
 		return errors.New("Not found \"events\" column family")
 	}
 
-	// Getting events which is not yet handled
-	ro := gorocksdb.NewDefaultReadOptions()
-	ro.SetFillCache(false)
-	iter := store.db.NewIteratorCF(ro, cfHandle)
-	if iter.Err() != nil {
-		value.Free()
-		return iter.Err()
-	}
-
-	iter.Seek(value.Data())
+	iter := cfHandle.Db.NewIter(nil)
+	iter.SeekGE(value)
+	closer.Close()
 	for ; iter.Valid(); iter.Next() {
+		seq := BytesToUint64(iter.Key())
 
-		// Getting sequence number
-		k := iter.Key()
-		seq := BytesToUint64(k.Data())
-		k.Free()
+		data := make([]byte, len(iter.Value()))
+		copy(data, iter.Value())
 
 		// Create a new snapshot request
-		v := iter.Value()
 		req := snapshotRequestPool.Get().(*SnapshotRequest)
 		req.Store = store
 		req.Sequence = seq
-		req.Data = v.Data()
+		req.Data = data
 
 		// process
 		err := ss.handleRequest(req)
 		if err != nil {
-			value.Free()
-			v.Free()
 			return err
 		}
 
 		// Release
-		v.Free()
 		snapshotRequestPool.Put(req)
 	}
 
 	iter.Close()
-	value.Free()
 
 	return nil
 }

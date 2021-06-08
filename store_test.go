@@ -83,7 +83,7 @@ func TestSubscription(t *testing.T) {
 
 	// Subscription to store
 	_, err := store.Subscribe(store.name, 0, func(event *Event) {
-		//		t.Logf("%d %s", seq, string(data))
+		//		t.Logf("%d %s", event.Sequence, string(event.Data))
 		event.Ack()
 		wg.Done()
 	})
@@ -145,7 +145,6 @@ func TestSubscriptionOffset(t *testing.T) {
 	}
 
 	// Open store again
-	createTestEventStore("testing", false)
 	lastSeq, err := store.GetDurableState(store.name)
 	if err != nil {
 		t.Error(err)

@@ -2,9 +2,10 @@ package eventstore
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
-	"github.com/tecbot/gorocksdb"
+	"github.com/cockroachdb/pebble"
 )
 
 type StoreHandler func(*Event)
@@ -13,18 +14,20 @@ type Subscription struct {
 	store        *Store
 	durableName  string
 	lastSequence uint64
-	iterator     *gorocksdb.Iterator
+	iterator     *pebble.Iterator
+	cf           *ColumnFamily
 	newTriggered chan struct{}
 	watchFn      StoreHandler
 	isClosed     bool
+	mutex        sync.Mutex
 }
 
-func NewSubscription(store *Store, durableName string, startAt uint64, iterator *gorocksdb.Iterator, fn StoreHandler) *Subscription {
+func NewSubscription(store *Store, durableName string, startAt uint64, cf *ColumnFamily, fn StoreHandler) *Subscription {
 	return &Subscription{
 		store:        store,
 		durableName:  durableName,
 		lastSequence: startAt,
-		iterator:     iterator,
+		cf:           cf,
 		newTriggered: make(chan struct{}, 1),
 		isClosed:     false,
 		watchFn:      fn,
@@ -32,8 +35,13 @@ func NewSubscription(store *Store, durableName string, startAt uint64, iterator 
 }
 
 func (sub *Subscription) Close() {
+
 	close(sub.newTriggered)
+
+	sub.mutex.Lock()
 	sub.isClosed = true
+	sub.mutex.Unlock()
+
 }
 
 func (sub *Subscription) Watch() {
@@ -44,7 +52,7 @@ func (sub *Subscription) Watch() {
 		sub.pull()
 	}
 
-	sub.iterator.Close()
+	//	sub.iterator.Close()
 }
 
 func (sub *Subscription) Trigger() error {
@@ -64,41 +72,45 @@ func (sub *Subscription) Trigger() error {
 
 func (sub *Subscription) pull() {
 
+	sub.mutex.Lock()
+	defer sub.mutex.Unlock()
+
 	if sub.isClosed {
 		return
 	}
 
-	sub.iterator.Seek(Uint64ToBytes(sub.lastSequence))
+	iter := sub.cf.Db.NewIter(nil)
+	iter.SeekGE(Uint64ToBytes(sub.lastSequence))
 
 	for !sub.isClosed {
 
-		if !sub.iterator.Valid() {
+		if !iter.Valid() {
 			break
 		}
 
 		// Getting sequence number
-		key := sub.iterator.Key()
-		seq := BytesToUint64(key.Data())
-		key.Free()
+		key := iter.Key()
+		seq := BytesToUint64(key)
 
 		// If we get record which is the same with last seq, find next one
 		if seq == sub.lastSequence {
 
 			// Get next one
-			sub.iterator.Next()
+			iter.Next()
 			continue
 		}
 
 		sub.lastSequence = seq
 
 		// Invoke data handler
-		value := sub.iterator.Value()
-		sub.handle(seq, value.Data())
-		value.Free()
+		value := iter.Value()
+		sub.handle(seq, value)
 
 		// Get next one
-		sub.iterator.Next()
+		iter.Next()
 	}
+
+	iter.Close()
 }
 
 func (sub *Subscription) handle(seq uint64, data []byte) {

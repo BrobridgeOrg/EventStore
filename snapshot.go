@@ -5,7 +5,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/tecbot/gorocksdb"
+	"github.com/cockroachdb/pebble"
 )
 
 type SnapshotRequest struct {
@@ -36,14 +36,15 @@ func (request *SnapshotRequest) Get(collection []byte, key []byte) ([]byte, erro
 		key,
 	}, []byte("-"))
 
-	value, err := request.Store.db.GetCF(request.Store.ro, cfHandle, snapshotKey)
+	value, closer, err := cfHandle.Db.Get(snapshotKey)
 	if err != nil {
 		return nil, err
 	}
 
-	data := make([]byte, len(value.Data()))
-	copy(data, value.Data())
-	value.Free()
+	data := make([]byte, len(value))
+	copy(data, value)
+
+	closer.Close()
 
 	return data, nil
 }
@@ -60,20 +61,20 @@ func (request *SnapshotRequest) Upsert(collection []byte, key []byte, fn func(or
 		key,
 	}, []byte("-"))
 
-	value, err := request.Store.db.GetCF(request.Store.ro, cfHandle, snapshotKey)
+	value, closer, err := cfHandle.Db.Get(snapshotKey)
 	if err != nil {
+
+		// Not found so insert a new record
+		if err == pebble.ErrNotFound {
+			return request.write(collection, snapshotKey, request.Data)
+		}
+
 		return err
 	}
 
-	// Not found so insert a new record
-	if value.Size() == 0 {
-		value.Free()
-		return request.write(collection, snapshotKey, request.Data)
-	}
-
 	// Update original data
-	newData, err := fn(value.Data())
-	value.Free()
+	newData, err := fn(value)
+	closer.Close()
 	if err != nil {
 		return err
 	}
@@ -81,7 +82,7 @@ func (request *SnapshotRequest) Upsert(collection []byte, key []byte, fn func(or
 	return request.write(collection, snapshotKey, newData)
 }
 
-func (request *SnapshotRequest) updateDurableState(batch *gorocksdb.WriteBatch, collection []byte) error {
+func (request *SnapshotRequest) updateDurableState(batch *pebble.Batch, collection []byte) error {
 
 	stateHandle, err := request.Store.GetColumnFamailyHandle("snapshot_states")
 	if err != nil {
@@ -96,12 +97,12 @@ func (request *SnapshotRequest) updateDurableState(batch *gorocksdb.WriteBatch, 
 	}, []byte("-"))
 
 	if batch == nil {
-		err = request.Store.db.PutCF(request.Store.wo, stateHandle, lastSequenceKey, seqData)
+		err = stateHandle.Db.Set(lastSequenceKey, seqData, pebble.Sync)
 		if err != nil {
 			return err
 		}
 	} else {
-		batch.PutCF(stateHandle, lastSequenceKey, seqData)
+		batch.Set(lastSequenceKey, seqData, nil)
 	}
 
 	return nil
@@ -118,24 +119,24 @@ func (request *SnapshotRequest) Delete(collection []byte, key []byte) error {
 		return errors.New("Not found \"snapshot\" column family")
 	}
 
-	batch := gorocksdb.NewWriteBatch()
-	batch.DeleteCF(cfHandle, key)
+	batch := cfHandle.Db.NewBatch()
+	batch.Delete(key, nil)
 
 	// Update snapshot state
 	err = request.updateDurableState(batch, collection)
 	if err != nil {
-		batch.Destroy()
+		batch.Close()
 		return err
 	}
 
 	// Write to database
-	err = request.Store.db.Write(request.Store.wo, batch)
+	err = cfHandle.Db.Apply(batch, nil)
 	if err != nil {
-		batch.Destroy()
+		batch.Close()
 		return err
 	}
 
-	batch.Destroy()
+	batch.Close()
 
 	return nil
 }
@@ -147,24 +148,24 @@ func (request *SnapshotRequest) write(collection []byte, key []byte, data []byte
 		return errors.New("Not found \"snapshot\" column family")
 	}
 
-	batch := gorocksdb.NewWriteBatch()
-	batch.PutCF(cfHandle, key, data)
+	batch := cfHandle.Db.NewBatch()
+	batch.Set(key, data, nil)
 
 	// Update snapshot state
 	err = request.updateDurableState(batch, collection)
 	if err != nil {
-		batch.Destroy()
+		batch.Close()
 		return err
 	}
 
 	// Write to database
-	err = request.Store.db.Write(request.Store.wo, batch)
+	err = cfHandle.Db.Apply(batch, nil)
 	if err != nil {
-		batch.Destroy()
+		batch.Close()
 		return err
 	}
 
-	batch.Destroy()
+	batch.Close()
 
 	return nil
 }
