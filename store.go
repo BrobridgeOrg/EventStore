@@ -154,6 +154,8 @@ func (store *Store) initializeCounter() error {
 	}
 
 	iter := cfHandle.Db.NewIter(nil)
+	defer iter.Close()
+
 	counter := Counter(1)
 	for iter.Last(); iter.Valid(); iter.Next() {
 		lastSeq := BytesToUint64(iter.Key())

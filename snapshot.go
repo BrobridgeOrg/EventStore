@@ -49,7 +49,7 @@ func (request *SnapshotRequest) Get(collection []byte, key []byte) ([]byte, erro
 	return data, nil
 }
 
-func (request *SnapshotRequest) Upsert(collection []byte, key []byte, fn func(origin []byte) ([]byte, error)) error {
+func (request *SnapshotRequest) Upsert(collection []byte, key []byte, value []byte, fn func([]byte, []byte) []byte) error {
 
 	cfHandle, err := request.Store.GetColumnFamailyHandle("snapshot")
 	if err != nil {
@@ -61,25 +61,31 @@ func (request *SnapshotRequest) Upsert(collection []byte, key []byte, fn func(or
 		key,
 	}, []byte("-"))
 
-	value, closer, err := cfHandle.Db.Get(snapshotKey)
+	batch := cfHandle.Db.NewBatch()
+
+	// Update snapshot state
+	err = request.updateDurableState(batch, collection)
 	if err != nil {
-
-		// Not found so insert a new record
-		if err == pebble.ErrNotFound {
-			return request.write(collection, snapshotKey, request.Data)
-		}
-
+		batch.Close()
 		return err
 	}
 
-	// Update original data
-	newData, err := fn(value)
-	closer.Close()
+	cfHandle.Merge = fn
+	err = batch.Merge(snapshotKey, value, pebble.NoSync)
 	if err != nil {
 		return err
 	}
 
-	return request.write(collection, snapshotKey, newData)
+	// Write to database
+	err = cfHandle.Db.Apply(batch, pebble.NoSync)
+	if err != nil {
+		batch.Close()
+		return err
+	}
+
+	batch.Close()
+
+	return nil
 }
 
 func (request *SnapshotRequest) updateDurableState(batch *pebble.Batch, collection []byte) error {
@@ -97,12 +103,12 @@ func (request *SnapshotRequest) updateDurableState(batch *pebble.Batch, collecti
 	}, []byte("-"))
 
 	if batch == nil {
-		err = stateHandle.Db.Set(lastSequenceKey, seqData, pebble.Sync)
+		err = stateHandle.Db.Set(lastSequenceKey, seqData, pebble.NoSync)
 		if err != nil {
 			return err
 		}
 	} else {
-		batch.Set(lastSequenceKey, seqData, nil)
+		batch.Set(lastSequenceKey, seqData, pebble.NoSync)
 	}
 
 	return nil
@@ -130,7 +136,7 @@ func (request *SnapshotRequest) Delete(collection []byte, key []byte) error {
 	}
 
 	// Write to database
-	err = cfHandle.Db.Apply(batch, nil)
+	err = cfHandle.Db.Apply(batch, pebble.NoSync)
 	if err != nil {
 		batch.Close()
 		return err
@@ -159,7 +165,7 @@ func (request *SnapshotRequest) write(collection []byte, key []byte, data []byte
 	}
 
 	// Write to database
-	err = cfHandle.Db.Apply(batch, nil)
+	err = cfHandle.Db.Apply(batch, pebble.NoSync)
 	if err != nil {
 		batch.Close()
 		return err

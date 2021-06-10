@@ -83,7 +83,7 @@ func (ss *SnapshotController) updateSnapshotState(req *SnapshotRequest) error {
 
 	// Update snapshot state
 	seqData := Uint64ToBytes(req.Sequence)
-	err = stateHandle.Db.Set([]byte("_state"), seqData, pebble.Sync)
+	err = stateHandle.Db.Set([]byte("_state"), seqData, pebble.NoSync)
 	if err != nil {
 		return err
 	}

@@ -61,10 +61,10 @@ func BenchmarkSnapshotPerformance(b *testing.B) {
 	// Setup snapshot handler
 	testEventstore.SetSnapshotHandler(func(request *SnapshotRequest) error {
 
-		err := request.Upsert([]byte("testing"), []byte("testing_key"), func(origin []byte) ([]byte, error) {
+		err := request.Upsert([]byte("testing"), []byte("testing_key"), []byte("value"), func(origin []byte, newValue []byte) []byte {
 
 			// Replace old data directly
-			return origin, nil
+			return newValue
 		})
 
 		if err != nil {
@@ -78,11 +78,14 @@ func BenchmarkSnapshotPerformance(b *testing.B) {
 
 	wg.Add(b.N)
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		if _, err := store.Write([]byte("Benchmark")); err != nil {
-			panic(err)
+
+	go func() {
+		for i := 0; i < b.N; i++ {
+			if _, err := store.Write([]byte("Benchmark")); err != nil {
+				panic(err)
+			}
 		}
-	}
+	}()
 
 	wg.Wait()
 }
