@@ -2,7 +2,6 @@ package eventstore
 
 import (
 	"bytes"
-	"errors"
 
 	"github.com/cockroachdb/pebble"
 )
@@ -22,7 +21,7 @@ func (sv *SnapshotView) Initialize() error {
 
 	cfHandle, err := sv.store.GetColumnFamailyHandle("snapshot")
 	if err != nil {
-		return errors.New("Not found \"snapshot\" column family")
+		return err
 	}
 
 	sv.nativeSnapshot = cfHandle.Db.NewSnapshot()

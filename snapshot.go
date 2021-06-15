@@ -2,7 +2,6 @@ package eventstore
 
 import (
 	"bytes"
-	"errors"
 	"sync"
 
 	"github.com/cockroachdb/pebble"
@@ -28,7 +27,7 @@ func (request *SnapshotRequest) Get(collection []byte, key []byte) ([]byte, erro
 
 	cfHandle, err := request.Store.GetColumnFamailyHandle("snapshot")
 	if err != nil {
-		return nil, errors.New("Not found \"snapshot\" column family")
+		return nil, err
 	}
 
 	snapshotKey := bytes.Join([][]byte{
@@ -53,7 +52,7 @@ func (request *SnapshotRequest) Upsert(collection []byte, key []byte, value []by
 
 	cfHandle, err := request.Store.GetColumnFamailyHandle("snapshot")
 	if err != nil {
-		return errors.New("Not found \"snapshot\" column family")
+		return err
 	}
 
 	snapshotKey := bytes.Join([][]byte{
@@ -92,7 +91,7 @@ func (request *SnapshotRequest) updateDurableState(batch *pebble.Batch, collecti
 
 	stateHandle, err := request.Store.GetColumnFamailyHandle("snapshot_states")
 	if err != nil {
-		return errors.New("Not found \"snapshot_states\" column family")
+		return err
 	}
 
 	// Update snapshot state
@@ -122,7 +121,7 @@ func (request *SnapshotRequest) Delete(collection []byte, key []byte) error {
 
 	cfHandle, err := request.Store.GetColumnFamailyHandle("snapshot")
 	if err != nil {
-		return errors.New("Not found \"snapshot\" column family")
+		return err
 	}
 
 	batch := cfHandle.Db.NewBatch()
@@ -151,7 +150,7 @@ func (request *SnapshotRequest) write(collection []byte, key []byte, data []byte
 
 	cfHandle, err := request.Store.GetColumnFamailyHandle("snapshot")
 	if err != nil {
-		return errors.New("Not found \"snapshot\" column family")
+		return err
 	}
 
 	batch := cfHandle.Db.NewBatch()

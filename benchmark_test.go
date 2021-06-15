@@ -13,6 +13,7 @@ func BenchmarkWrite(b *testing.B) {
 	store := createTestStore()
 
 	b.ResetTimer()
+
 	for i := 0; i < b.N; i++ {
 		if _, err := store.Write([]byte("Benchmark")); err != nil {
 			panic(err)

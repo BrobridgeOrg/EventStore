@@ -1,7 +1,6 @@
 package eventstore
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -150,7 +149,7 @@ func (store *Store) initializeCounter() error {
 
 	cfHandle, err := store.GetColumnFamailyHandle("events")
 	if err != nil {
-		return errors.New("Not found \"events\" column family, so failed to initialize counter.")
+		return fmt.Errorf("Failed to initialize counter: %v", err)
 	}
 
 	iter := cfHandle.Db.NewIter(nil)
@@ -171,7 +170,7 @@ func (store *Store) Write(data []byte) (uint64, error) {
 
 	cfHandle, err := store.GetColumnFamailyHandle("events")
 	if err != nil {
-		return 0, errors.New("Not found \"events\" column family")
+		return 0, err
 	}
 
 	// Getting sequence
@@ -182,7 +181,7 @@ func (store *Store) Write(data []byte) (uint64, error) {
 	key := Uint64ToBytes(seq)
 
 	// Write
-	err = cfHandle.Db.Set(key, data, pebble.NoSync)
+	err = cfHandle.Write(key, data)
 	if err != nil {
 		return 0, err
 	}
@@ -214,7 +213,7 @@ func (store *Store) GetDurableState(durableName string) (uint64, error) {
 
 	cfHandle, err := store.GetColumnFamailyHandle("states")
 	if err != nil {
-		return 0, errors.New("Not found \"states\" column family")
+		return 0, err
 	}
 
 	// Write
@@ -238,13 +237,13 @@ func (store *Store) UpdateDurableState(durableName string, lastSeq uint64) error
 
 	cfHandle, err := store.GetColumnFamailyHandle("states")
 	if err != nil {
-		return errors.New("Not found \"states\" column family")
+		return err
 	}
 
 	value := Uint64ToBytes(lastSeq)
 
 	// Write
-	err = cfHandle.Db.Set(StrToBytes(durableName), value, pebble.NoSync)
+	err = cfHandle.Write(StrToBytes(durableName), value)
 	if err != nil {
 		return err
 	}
@@ -266,7 +265,7 @@ func (store *Store) createSubscription(durableName string, startAt uint64, fn St
 
 	cfHandle, err := store.GetColumnFamailyHandle("events")
 	if err != nil {
-		return nil, errors.New("Not found \"events\" column family")
+		return nil, err
 	}
 
 	//	iter := cfHandle.Db.NewIter(nil)
@@ -303,7 +302,7 @@ func (store *Store) Fetch(startAt uint64, offset uint64, count int) ([]*Event, e
 
 	cfHandle, err := store.GetColumnFamailyHandle("events")
 	if err != nil {
-		return nil, errors.New("Not found \"events\" column family")
+		return nil, err
 	}
 
 	offsetCounter := offset

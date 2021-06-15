@@ -78,7 +78,7 @@ func (ss *SnapshotController) updateSnapshotState(req *SnapshotRequest) error {
 
 	stateHandle, err := req.Store.GetColumnFamailyHandle("snapshot_states")
 	if err != nil {
-		return errors.New("Not found \"snapshot_states\" column family")
+		return err
 	}
 
 	// Update snapshot state
@@ -112,7 +112,7 @@ func (ss *SnapshotController) RecoverSnapshot(store *Store) error {
 
 	stateHandle, err := store.GetColumnFamailyHandle("snapshot_states")
 	if err != nil {
-		return errors.New("Not found \"snapshot_states\" column family")
+		return err
 	}
 
 	value, closer, err := stateHandle.Db.Get([]byte("_state"))
@@ -128,7 +128,7 @@ func (ss *SnapshotController) RecoverSnapshot(store *Store) error {
 
 	cfHandle, err := store.GetColumnFamailyHandle("events")
 	if err != nil {
-		return errors.New("Not found \"events\" column family")
+		return err
 	}
 
 	iter := cfHandle.Db.NewIter(nil)
