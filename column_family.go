@@ -2,7 +2,6 @@ package eventstore
 
 import (
 	"path/filepath"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -17,7 +16,6 @@ type ColumnFamily struct {
 
 	closed chan struct{}
 
-	mutex       sync.Mutex
 	isScheduled uint32
 	timer       *time.Timer
 }
