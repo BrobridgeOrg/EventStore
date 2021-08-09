@@ -2,6 +2,7 @@ package eventstore
 
 import (
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -14,7 +15,8 @@ type ColumnFamily struct {
 	Name  string
 	Merge func([]byte, []byte) []byte
 
-	closed chan struct{}
+	mergers sync.Map
+	closed  chan struct{}
 
 	isScheduled uint32
 	timer       *time.Timer
@@ -77,7 +79,14 @@ func (cf *ColumnFamily) Open() error {
 		Merger: &pebble.Merger{
 			Merge: func(key []byte, value []byte) (pebble.ValueMerger, error) {
 				m := &Merger{}
-				m.SetHandler(cf.Merge)
+
+				fn, ok := cf.mergers.LoadAndDelete(string(key))
+				if !ok {
+					m.SetHandler(cf.Merge)
+					return m, m.MergeNewer(value)
+				}
+
+				m.SetHandler(fn.(func([]byte, []byte) []byte))
 				return m, m.MergeNewer(value)
 			},
 		},
@@ -135,4 +144,8 @@ func (cf *ColumnFamily) Write(key []byte, data []byte) error {
 	cf.requestSync()
 
 	return nil
+}
+
+func (cf *ColumnFamily) RegisterMerger(key []byte, fn func([]byte, []byte) []byte) {
+	cf.mergers.Store(string(key), fn)
 }

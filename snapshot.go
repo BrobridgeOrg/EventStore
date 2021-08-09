@@ -69,7 +69,7 @@ func (request *SnapshotRequest) Upsert(collection []byte, key []byte, value []by
 		return err
 	}
 
-	cfHandle.Merge = fn
+	cfHandle.RegisterMerger(snapshotKey, fn)
 	err = batch.Merge(snapshotKey, value, pebble.NoSync)
 	if err != nil {
 		return err
