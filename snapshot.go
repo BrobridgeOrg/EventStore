@@ -60,22 +60,11 @@ func (request *SnapshotRequest) Upsert(collection []byte, key []byte, value []by
 		key,
 	}, []byte("-"))
 
-	batch := cfHandle.Db.NewBatch()
-
 	cfHandle.RegisterMerger(snapshotKey, fn)
-	err = batch.Merge(snapshotKey, value, pebble.NoSync)
+	err = cfHandle.Db.Merge(snapshotKey, value, pebble.NoSync)
 	if err != nil {
 		return err
 	}
-
-	// Write to database
-	err = cfHandle.Db.Apply(batch, pebble.NoSync)
-	if err != nil {
-		batch.Close()
-		return err
-	}
-
-	batch.Close()
 
 	// Update snapshot state
 	err = request.updateDurableState(nil, collection)
@@ -123,17 +112,10 @@ func (request *SnapshotRequest) Delete(collection []byte, key []byte) error {
 		return err
 	}
 
-	batch := cfHandle.Db.NewBatch()
-	batch.Delete(key, nil)
-
-	// Write to database
-	err = cfHandle.Db.Apply(batch, pebble.NoSync)
+	err = cfHandle.Db.Delete(key, pebble.NoSync)
 	if err != nil {
-		batch.Close()
 		return err
 	}
-
-	batch.Close()
 
 	return nil
 }
@@ -145,17 +127,10 @@ func (request *SnapshotRequest) write(collection []byte, key []byte, data []byte
 		return err
 	}
 
-	batch := cfHandle.Db.NewBatch()
-	batch.Set(key, data, nil)
-
-	// Write to database
-	err = cfHandle.Db.Apply(batch, pebble.NoSync)
+	err = cfHandle.Db.Set(key, data, pebble.NoSync)
 	if err != nil {
-		batch.Close()
 		return err
 	}
-
-	batch.Close()
 
 	// Update snapshot state
 	err = request.updateDurableState(nil, collection)
