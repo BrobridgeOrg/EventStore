@@ -134,9 +134,9 @@ func TestSubscription(t *testing.T) {
 		panic(err)
 	}
 
-	wg.Add(10)
+	wg.Add(1000)
 	go func() {
-		for i := 0; i < 10; i++ {
+		for i := 0; i < 1000; i++ {
 			if _, err := store.Write([]byte("Benchmark" + strconv.Itoa(i))); err != nil {
 				t.Error(err)
 			}
@@ -256,9 +256,9 @@ func TestSubscriptionWithDurableName(t *testing.T) {
 		panic(err)
 	}
 
-	wg.Add(10)
+	wg.Add(100)
 	go func() {
-		for i := 0; i < 10; i++ {
+		for i := 0; i < 100; i++ {
 			if _, err := store.Write([]byte("Benchmark" + strconv.Itoa(i))); err != nil {
 				t.Error(err)
 			}
@@ -285,9 +285,9 @@ func TestSubscriptionWithDurableName(t *testing.T) {
 		t.Error(err)
 	}
 
-	wg.Add(10)
+	wg.Add(100)
 	go func() {
-		for i := 0; i < 10; i++ {
+		for i := 0; i < 100; i++ {
 			if _, err := store.Write([]byte("Benchmark" + strconv.Itoa(i))); err != nil {
 				t.Error(err)
 			}

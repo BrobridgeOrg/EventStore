@@ -121,8 +121,8 @@ func TestSnapshotViewFetch(t *testing.T) {
 		return nil
 	})
 
-	wg.Add(100)
-	for i := 0; i < 100; i++ {
+	wg.Add(1000)
+	for i := 0; i < 1000; i++ {
 		if _, err := store.Write([]byte("original value " + strconv.Itoa(i))); err != nil {
 			t.Error(err)
 		}
@@ -137,7 +137,7 @@ func TestSnapshotViewFetch(t *testing.T) {
 		panic(err)
 	}
 
-	records, err := view.Fetch([]byte("testing"), []byte(""), 0, 100)
+	records, err := view.Fetch([]byte("testing"), []byte(""), 0, 1000)
 	if err != nil {
 		panic(err)
 	}
