@@ -305,6 +305,7 @@ func (store *Store) Fetch(startAt uint64, offset uint64, count int) ([]*Event, e
 		return nil, err
 	}
 
+	total := 0
 	offsetCounter := offset
 	iter := cfHandle.Db.NewIter(nil)
 	for iter.SeekGE(Uint64ToBytes(startAt)); iter.Valid(); iter.Next() {
@@ -324,6 +325,12 @@ func (store *Store) Fetch(startAt uint64, offset uint64, count int) ([]*Event, e
 		event.Data = data
 
 		events = append(events, event)
+
+		// limit
+		total++
+		if total == count {
+			break
+		}
 	}
 
 	iter.Close()

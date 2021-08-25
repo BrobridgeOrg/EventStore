@@ -32,20 +32,17 @@ func TestFetch(t *testing.T) {
 	}
 
 	var lastSeq uint64 = 0
-	for i := uint64(0); i < 5000; {
-		events, err := store.Fetch(i, 0, 100)
-		if err != nil {
-			panic(err)
-		}
+	events, err := store.Fetch(0, 0, 5000)
+	if err != nil {
+		panic(err)
+	}
 
-		for _, event := range events {
-			lastSeq++
-			if lastSeq != event.Sequence {
-				t.Fail()
-			}
+	for _, event := range events {
+		lastSeq++
+		if lastSeq != event.Sequence {
+			t.Error(lastSeq, event.Sequence)
+			t.Fail()
 		}
-
-		i += uint64(len(events))
 	}
 }
 
@@ -85,6 +82,29 @@ func TestRealtimeFetch(t *testing.T) {
 		}
 
 		i += uint64(len(events))
+	}
+}
+
+func TestFetchWithCount(t *testing.T) {
+
+	createTestEventStore("testing", false)
+	defer closeTestEventStore()
+
+	store := createTestStore()
+
+	for i := 0; i < 10; i++ {
+		if _, err := store.Write([]byte("Benchmark" + strconv.Itoa(i))); err != nil {
+			t.Error(err)
+		}
+	}
+
+	events, err := store.Fetch(0, 1, 2)
+	if err != nil {
+		panic(err)
+	}
+
+	if len(events) != 2 {
+		t.Fail()
 	}
 }
 
