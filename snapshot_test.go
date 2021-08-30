@@ -156,5 +156,7 @@ func TestSnapshotViewFetch(t *testing.T) {
 		if bytes.Compare(key, record.Key) != 0 {
 			t.Fail()
 		}
+
+		record.Release()
 	}
 }

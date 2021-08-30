@@ -96,7 +96,7 @@ func (cf *ColumnFamily) Open() error {
 	}
 
 	// Initialize 4 levels
-	opts.Levels = make([]pebble.LevelOptions, 4)
+	opts.Levels = make([]pebble.LevelOptions, 8)
 	for i := range opts.Levels {
 		l := &opts.Levels[i]
 

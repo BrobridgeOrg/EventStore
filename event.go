@@ -28,3 +28,7 @@ func (event *Event) reset() {
 	close(event.completed)
 	event.completed = make(chan struct{}, 1)
 }
+
+func (event *Event) Release() {
+	eventPool.Put(event)
+}

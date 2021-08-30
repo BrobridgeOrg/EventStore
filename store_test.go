@@ -43,6 +43,8 @@ func TestFetch(t *testing.T) {
 			t.Error(lastSeq, event.Sequence)
 			t.Fail()
 		}
+
+		event.Release()
 	}
 }
 
@@ -79,6 +81,8 @@ func TestRealtimeFetch(t *testing.T) {
 			if lastSeq != event.Sequence {
 				t.Fail()
 			}
+
+			event.Release()
 		}
 
 		i += uint64(len(events))
@@ -132,6 +136,8 @@ func TestFetchWithOffset(t *testing.T) {
 		if lastSeq != event.Sequence {
 			t.Fail()
 		}
+
+		event.Release()
 	}
 }
 
