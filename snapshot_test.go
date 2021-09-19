@@ -2,7 +2,6 @@ package eventstore
 
 import (
 	"bytes"
-	"encoding/binary"
 	"strconv"
 	"sync"
 	"testing"
@@ -101,12 +100,11 @@ func TestSnapshotViewFetch(t *testing.T) {
 	store := createTestStore()
 
 	// Setup snapshot handler
-	snapshotCounter := 0
+	snapshotCounter := uint64(0)
 	testEventstore.SetSnapshotHandler(func(request *SnapshotRequest) error {
 
 		snapshotCounter++
-		key := make([]byte, 4)
-		binary.BigEndian.PutUint32(key, uint32(snapshotCounter))
+		key := Uint64ToBytes(snapshotCounter)
 
 		err := request.Upsert([]byte("testing"), key, []byte("value"), func(origin []byte, newValue []byte) []byte {
 
@@ -121,12 +119,14 @@ func TestSnapshotViewFetch(t *testing.T) {
 		return nil
 	})
 
-	wg.Add(1000)
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 50000; i++ {
 		if _, err := store.Write([]byte("original value " + strconv.Itoa(i))); err != nil {
 			t.Error(err)
 		}
+
+		wg.Add(1)
 	}
+
 	wg.Wait()
 
 	// Create a new snapshot view
@@ -137,26 +137,33 @@ func TestSnapshotViewFetch(t *testing.T) {
 		panic(err)
 	}
 
-	records, err := view.Fetch([]byte("testing"), []byte(""), 0, 1000)
-	if err != nil {
-		panic(err)
-	}
+	for targetKey := uint64(0); targetKey < snapshotCounter; {
 
-	targetKey := 0
-	for _, record := range records {
-		targetKey++
-
-		key := make([]byte, 4)
-		binary.BigEndian.PutUint32(key, uint32(targetKey))
-
-		if bytes.Compare(record.Data, []byte("value")) != 0 {
-			t.Fail()
+		findKey := Uint64ToBytes(targetKey)
+		offset := uint64(0)
+		if targetKey > 0 {
+			offset = 1
 		}
 
-		if bytes.Compare(key, record.Key) != 0 {
-			t.Fail()
+		records, err := view.Fetch([]byte("testing"), findKey, offset, 1000)
+		if err != nil {
+			panic(err)
 		}
 
-		record.Release()
+		for _, record := range records {
+			targetKey++
+
+			key := Uint64ToBytes(targetKey)
+
+			if bytes.Compare(record.Data, []byte("value")) != 0 {
+				t.Fail()
+			}
+
+			if bytes.Compare(key, record.Key) != 0 {
+				t.Fail()
+			}
+
+			record.Release()
+		}
 	}
 }
