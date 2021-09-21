@@ -119,12 +119,17 @@ func TestSnapshotViewFetch(t *testing.T) {
 		return nil
 	})
 
-	for i := 0; i < 50000; i++ {
-		if _, err := store.Write([]byte("original value " + strconv.Itoa(i))); err != nil {
-			t.Error(err)
-		}
-
-		wg.Add(1)
+	// Write to strore
+	totalCount := 200000
+	wg.Add(totalCount)
+	for i := 0; i < totalCount/10000; i++ {
+		go func(base int) {
+			for i := base; i < base+10000; i++ {
+				if _, err := store.Write([]byte("original value " + strconv.Itoa(i))); err != nil {
+					t.Error(err)
+				}
+			}
+		}(i * 10000)
 	}
 
 	wg.Wait()
@@ -137,7 +142,8 @@ func TestSnapshotViewFetch(t *testing.T) {
 		panic(err)
 	}
 
-	for targetKey := uint64(0); targetKey < snapshotCounter; {
+	targetKey := uint64(0)
+	for targetKey < snapshotCounter {
 
 		findKey := Uint64ToBytes(targetKey)
 		offset := uint64(0)
@@ -165,5 +171,13 @@ func TestSnapshotViewFetch(t *testing.T) {
 
 			record.Release()
 		}
+	}
+
+	if snapshotCounter != uint64(totalCount) {
+		t.Fail()
+	}
+
+	if targetKey != uint64(totalCount) {
+		t.Fail()
 	}
 }
