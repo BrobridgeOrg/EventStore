@@ -117,7 +117,7 @@ func (request *SnapshotRequest) Delete(collection []byte, key []byte) error {
 		key,
 	}, []byte("-"))
 
-	err = cfHandle.Db.Delete(key, pebble.NoSync)
+	err = cfHandle.Db.Delete(snapshotKey, pebble.NoSync)
 	if err != nil {
 		return err
 	}
