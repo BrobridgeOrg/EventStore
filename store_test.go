@@ -6,6 +6,23 @@ import (
 	"testing"
 )
 
+func TestDelete(t *testing.T) {
+
+	createTestEventStore("testing", false)
+	defer closeTestEventStore()
+
+	store := createTestStore()
+
+	seq, err := store.Write([]byte("Benchmark"))
+	if err != nil {
+		t.Error(err)
+	}
+
+	if err := store.Delete(seq); err != nil {
+		t.Error(err)
+	}
+}
+
 func TestWrite(t *testing.T) {
 
 	createTestEventStore("testing", false)

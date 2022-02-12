@@ -134,6 +134,18 @@ func (cf *ColumnFamily) Close() error {
 	return cf.Db.Close()
 }
 
+func (cf *ColumnFamily) Delete(key []byte) error {
+
+	err := cf.Db.Delete(key, pebble.NoSync)
+	if err != nil {
+		return err
+	}
+
+	cf.requestSync()
+
+	return nil
+}
+
 func (cf *ColumnFamily) Write(key []byte, data []byte) error {
 
 	err := cf.Db.Set(key, data, pebble.NoSync)
