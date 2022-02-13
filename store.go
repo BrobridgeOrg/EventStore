@@ -166,6 +166,25 @@ func (store *Store) initializeCounter() error {
 	return nil
 }
 
+func (store *Store) Delete(seq uint64) error {
+
+	cfHandle, err := store.GetColumnFamailyHandle("events")
+	if err != nil {
+		return err
+	}
+
+	// Preparing key-value
+	key := Uint64ToBytes(seq)
+
+	// Write
+	err = cfHandle.Delete(key)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (store *Store) Write(data []byte) (uint64, error) {
 
 	cfHandle, err := store.GetColumnFamailyHandle("events")
