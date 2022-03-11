@@ -10,12 +10,12 @@ import (
 )
 
 type Store struct {
+	counter        Counter
 	eventstore     *EventStore
 	options        *Options
 	name           string
 	dbPath         string
 	columnFamilies map[string]*ColumnFamily
-	counter        Counter
 
 	subscriptions sync.Map
 }

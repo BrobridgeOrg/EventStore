@@ -2,7 +2,6 @@ package eventstore
 
 import (
 	"bytes"
-	"strconv"
 	"sync"
 	"testing"
 )
@@ -104,9 +103,9 @@ func TestSnapshotViewFetch(t *testing.T) {
 	testEventstore.SetSnapshotHandler(func(request *SnapshotRequest) error {
 
 		snapshotCounter++
-		key := Uint64ToBytes(snapshotCounter)
+		primaryKey := request.Data
 
-		err := request.Upsert([]byte("testing"), key, []byte("value"), func(origin []byte, newValue []byte) []byte {
+		err := request.Upsert([]byte("testing"), primaryKey, request.Data, func(origin []byte, newValue []byte) []byte {
 
 			return newValue
 		})
@@ -122,14 +121,15 @@ func TestSnapshotViewFetch(t *testing.T) {
 	// Write to strore
 	totalCount := 200000
 	wg.Add(totalCount)
-	for i := 0; i < totalCount/10000; i++ {
-		go func(base int) {
-			for i := base; i < base+10000; i++ {
-				if _, err := store.Write([]byte("original value " + strconv.Itoa(i))); err != nil {
+	for i := 0; i < totalCount/20000; i++ {
+		go func(base uint64) {
+			for i := base; i < base+20000; i++ {
+				data := Uint64ToBytes(i + 1)
+				if _, err := store.Write(data); err != nil {
 					t.Error(err)
 				}
 			}
-		}(i * 10000)
+		}(uint64(i * 20000))
 	}
 
 	wg.Wait()
@@ -161,7 +161,7 @@ func TestSnapshotViewFetch(t *testing.T) {
 
 			key := Uint64ToBytes(targetKey)
 
-			if bytes.Compare(record.Data, []byte("value")) != 0 {
+			if bytes.Compare(key, record.Data) != 0 {
 				t.Fail()
 			}
 

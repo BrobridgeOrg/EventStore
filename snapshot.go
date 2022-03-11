@@ -8,8 +8,8 @@ import (
 )
 
 type SnapshotRequest struct {
-	Store    *Store
 	Sequence uint64
+	Store    *Store
 	Data     []byte
 }
 

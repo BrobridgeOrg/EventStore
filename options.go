@@ -1,15 +1,17 @@
 package eventstore
 
 type Options struct {
-	DatabasePath    string
-	EnabledSnapshot bool
-	SnapshotOptions *SnapshotOptions
+	DatabasePath     string
+	BypassEventStore bool
+	EnabledSnapshot  bool
+	SnapshotOptions  *SnapshotOptions
 }
 
 func NewOptions() *Options {
 
 	return &Options{
-		EnabledSnapshot: false,
-		SnapshotOptions: NewSnapshotOptions(),
+		BypassEventStore: false,
+		EnabledSnapshot:  false,
+		SnapshotOptions:  NewSnapshotOptions(),
 	}
 }
