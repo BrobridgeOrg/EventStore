@@ -1,9 +1,10 @@
 package eventstore
 
 import (
-	"bytes"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSnapshotWrite(t *testing.T) {
@@ -17,8 +18,10 @@ func TestSnapshotWrite(t *testing.T) {
 	// Setup snapshot handler
 	testEventstore.SetSnapshotHandler(func(request *SnapshotRequest) error {
 
-		err := request.Upsert([]byte("testing"), []byte("testing_key"), []byte("value"), func(origin []byte, newValue []byte) []byte {
+		_, err := request.Get([]byte("testing"), []byte("testing_key"))
+		assert.Equal(t, err, ErrRecordNotFound)
 
+		err = request.Upsert([]byte("testing"), []byte("testing_key"), []byte("value"), func(origin []byte, newValue []byte) []byte {
 			return newValue
 		})
 
@@ -26,14 +29,13 @@ func TestSnapshotWrite(t *testing.T) {
 			t.Error(err)
 		}
 
+		// Getting record after upsert
 		data, err := request.Get([]byte("testing"), []byte("testing_key"))
 		if err != nil {
 			t.Error(err)
 		}
 
-		if bytes.Compare(data, []byte("value")) != 0 {
-			t.Fail()
-		}
+		assert.Equal(t, data, []byte("value"))
 
 		wg.Done()
 
@@ -76,6 +78,10 @@ func TestSnapshotDelete(t *testing.T) {
 			t.Error(err)
 		}
 
+		// Check if record exists
+		_, err = request.Get([]byte("testing"), []byte("testing_key"))
+		assert.Equal(t, err, ErrRecordNotFound)
+
 		wg.Done()
 
 		return nil
@@ -106,7 +112,6 @@ func TestSnapshotViewFetch(t *testing.T) {
 		primaryKey := request.Data
 
 		err := request.Upsert([]byte("testing"), primaryKey, request.Data, func(origin []byte, newValue []byte) []byte {
-
 			return newValue
 		})
 		if err != nil {
@@ -153,7 +158,7 @@ func TestSnapshotViewFetch(t *testing.T) {
 
 		records, err := view.Fetch([]byte("testing"), findKey, offset, 1000)
 		if err != nil {
-			panic(err)
+			t.Error(err)
 		}
 
 		for _, record := range records {
@@ -161,23 +166,13 @@ func TestSnapshotViewFetch(t *testing.T) {
 
 			key := Uint64ToBytes(targetKey)
 
-			if bytes.Compare(key, record.Data) != 0 {
-				t.Fail()
-			}
-
-			if bytes.Compare(key, record.Key) != 0 {
-				t.Fail()
-			}
+			assert.Equal(t, key, record.Data)
+			assert.Equal(t, key, record.Key)
 
 			record.Release()
 		}
 	}
 
-	if snapshotCounter != uint64(totalCount) {
-		t.Fail()
-	}
-
-	if targetKey != uint64(totalCount) {
-		t.Fail()
-	}
+	assert.Equal(t, uint64(totalCount), snapshotCounter)
+	assert.Equal(t, uint64(totalCount), targetKey)
 }

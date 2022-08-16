@@ -31,10 +31,10 @@ func BenchmarkEventThroughput(b *testing.B) {
 	var wg sync.WaitGroup
 
 	// Subscription to store
-	_, err := store.Subscribe(store.name, 0, func(event *Event) {
+	_, err := store.Subscribe(func(event *Event) {
 		event.Ack()
 		wg.Done()
-	})
+	}, DurableName(store.name))
 	if err != nil {
 		panic(err)
 	}

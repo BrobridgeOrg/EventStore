@@ -280,7 +280,7 @@ func (store *Store) unregisterSubscription(sub *Subscription) error {
 	return nil
 }
 
-func (store *Store) createSubscription(durableName string, startAt uint64, fn StoreHandler) (*Subscription, error) {
+func (store *Store) createSubscription(fn StoreHandler, opts ...SubOpt) (*Subscription, error) {
 
 	cfHandle, err := store.GetColumnFamailyHandle("events")
 	if err != nil {
@@ -290,14 +290,14 @@ func (store *Store) createSubscription(durableName string, startAt uint64, fn St
 	//	iter := cfHandle.Db.NewIter(nil)
 
 	// Create a new subscription entry
-	sub := NewSubscription(store, durableName, startAt, cfHandle, fn)
+	sub := NewSubscription(store, cfHandle, fn, opts...)
 
 	return sub, nil
 }
 
-func (store *Store) Subscribe(durableName string, startAt uint64, fn StoreHandler) (*Subscription, error) {
+func (store *Store) Subscribe(fn StoreHandler, opts ...SubOpt) (*Subscription, error) {
 
-	sub, err := store.createSubscription(durableName, startAt, fn)
+	sub, err := store.createSubscription(fn, opts...)
 	if err != nil {
 		return nil, err
 	}

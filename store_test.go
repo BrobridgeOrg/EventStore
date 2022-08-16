@@ -1,9 +1,12 @@
 package eventstore
 
 import (
+	"fmt"
 	"strconv"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestDelete(t *testing.T) {
@@ -43,7 +46,7 @@ func TestFetch(t *testing.T) {
 	store := createTestStore()
 
 	for i := 0; i < 5000; i++ {
-		if _, err := store.Write([]byte("Benchmark" + strconv.Itoa(i))); err != nil {
+		if _, err := store.Write([]byte(fmt.Sprintf("%d", i+1))); err != nil {
 			t.Error(err)
 		}
 	}
@@ -56,10 +59,8 @@ func TestFetch(t *testing.T) {
 
 	for _, event := range events {
 		lastSeq++
-		if lastSeq != event.Sequence {
-			t.Error(lastSeq, event.Sequence)
-			t.Fail()
-		}
+		assert.Equal(t, lastSeq, event.Sequence)
+		assert.Equal(t, fmt.Sprintf("%d", lastSeq), string(event.Data))
 
 		event.Release()
 	}
@@ -74,7 +75,7 @@ func TestRealtimeFetch(t *testing.T) {
 
 	go func() {
 		for i := 0; i < 10000; i++ {
-			if _, err := store.Write([]byte("Benchmark" + strconv.Itoa(i))); err != nil {
+			if _, err := store.Write([]byte(fmt.Sprintf("%d", i+1))); err != nil {
 				t.Error(err)
 			}
 		}
@@ -95,9 +96,8 @@ func TestRealtimeFetch(t *testing.T) {
 
 		for _, event := range events {
 			lastSeq++
-			if lastSeq != event.Sequence {
-				t.Fail()
-			}
+			assert.Equal(t, lastSeq, event.Sequence)
+			assert.Equal(t, fmt.Sprintf("%d", lastSeq), string(event.Data))
 
 			event.Release()
 		}
@@ -168,11 +168,11 @@ func TestSubscription(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Subscription to store
-	_, err := store.Subscribe(store.name, 0, func(event *Event) {
+	_, err := store.Subscribe(func(event *Event) {
 		//		t.Logf("%d %s", event.Sequence, string(event.Data))
 		event.Ack()
 		wg.Done()
-	})
+	}, DurableName(store.name))
 	if err != nil {
 		panic(err)
 	}
@@ -199,12 +199,12 @@ func TestSubscriptionOffset(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Subscription to store
-	_, err := store.Subscribe(store.name, 0, func(event *Event) {
+	_, err := store.Subscribe(func(event *Event) {
 		//		t.Logf("%d %s", seq, string(data))
 		event.Ack()
 
 		wg.Done()
-	})
+	}, DurableName(store.name))
 	if err != nil {
 		panic(err)
 	}
@@ -212,7 +212,7 @@ func TestSubscriptionOffset(t *testing.T) {
 	wg.Add(50)
 	go func() {
 		for i := 1; i <= 50; i++ {
-			if _, err := store.Write([]byte("Benchmark" + strconv.Itoa(i))); err != nil {
+			if _, err := store.Write([]byte(fmt.Sprintf("%d", i))); err != nil {
 				t.Error(err)
 			}
 		}
@@ -243,18 +243,18 @@ func TestSubscriptionOffset(t *testing.T) {
 	// Write 50 records againg
 	wg.Add(50)
 	for i := 51; i <= 100; i++ {
-		if _, err := store.Write([]byte("Benchmark" + strconv.Itoa(i))); err != nil {
+		if _, err := store.Write([]byte(fmt.Sprintf("%d", i))); err != nil {
 			t.Error(err)
 		}
 	}
 
 	// Subscription to store
-	_, err = store.Subscribe(store.name, 50, func(event *Event) {
+	_, err = store.Subscribe(func(event *Event) {
 		//t.Logf("%d %s", event.Sequence, string(event.Data))
 		event.Ack()
 
 		wg.Done()
-	})
+	}, DurableName(store.name), StartAtSequence(50))
 	if err != nil {
 		panic(err)
 	}
@@ -281,61 +281,68 @@ func TestSubscriptionWithDurableName(t *testing.T) {
 
 	var wg sync.WaitGroup
 	var lastSeq uint64 = 0
-	storeName := store.name
+	msgCount := 100
 
 	// Subscribe to store
-	sub, err := store.Subscribe(storeName, lastSeq, func(event *Event) {
-		//		t.Logf("%d %s", seq, string(data))
+	sub, err := store.Subscribe(func(event *Event) {
 
 		lastSeq++
-		if lastSeq != event.Sequence {
-			t.Fail()
-		}
+		assert.Equal(t, lastSeq, event.Sequence)
+		assert.Equal(t, fmt.Sprintf("%d", lastSeq), string(event.Data))
 
 		event.Ack()
 		wg.Done()
-	})
+	}, DurableName(store.name))
 	if err != nil {
 		panic(err)
 	}
 
-	wg.Add(100)
+	wg.Add(msgCount - 30)
 	go func() {
-		for i := 0; i < 100; i++ {
-			if _, err := store.Write([]byte("Benchmark" + strconv.Itoa(i))); err != nil {
+		for i := 0; i < msgCount-30; i++ {
+			if _, err := store.Write([]byte(fmt.Sprintf("%d", i+1))); err != nil {
 				t.Error(err)
 			}
 		}
 	}()
 
 	wg.Wait()
+
+	assert.Equal(t, lastSeq, uint64(msgCount-30))
 
 	// Close current subscription
 	sub.Close()
 
-	// Subscribe to store
-	_, err = store.Subscribe(storeName, lastSeq, func(event *Event) {
-
-		lastSeq++
-		if lastSeq != event.Sequence {
-			t.Fail()
-		}
-
-		event.Ack()
-		wg.Done()
-	})
+	durableSeq, err := store.GetDurableState(store.name)
 	if err != nil {
 		t.Error(err)
 	}
 
-	wg.Add(100)
-	go func() {
-		for i := 0; i < 100; i++ {
-			if _, err := store.Write([]byte("Benchmark" + strconv.Itoa(i))); err != nil {
-				t.Error(err)
-			}
+	assert.Equal(t, lastSeq, durableSeq)
+
+	// Write more messages
+	wg.Add(30)
+	for i := 0; i < 30; i++ {
+		if _, err := store.Write([]byte(fmt.Sprintf("%d", i+1))); err != nil {
+			t.Error(err)
 		}
-	}()
+	}
+
+	// Subscribe to store
+	_, err = store.Subscribe(func(event *Event) {
+
+		lastSeq++
+		assert.Equal(t, lastSeq, event.Sequence)
+		assert.Equal(t, fmt.Sprintf("%d", lastSeq-uint64(msgCount-30)), string(event.Data))
+
+		event.Ack()
+		wg.Done()
+	}, DurableName(store.name))
+	if err != nil {
+		t.Error(err)
+	}
 
 	wg.Wait()
+
+	assert.Equal(t, lastSeq, uint64(msgCount))
 }

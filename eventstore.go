@@ -1,7 +1,12 @@
 package eventstore
 
 import (
+	"errors"
 	"os"
+)
+
+var (
+	ErrRecordNotFound = errors.New("EventStore: record not found")
 )
 
 type EventStore struct {

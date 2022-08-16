@@ -22,16 +22,40 @@ type Subscription struct {
 	mutex        sync.Mutex
 }
 
-func NewSubscription(store *Store, durableName string, startAt uint64, cf *ColumnFamily, fn StoreHandler) *Subscription {
-	return &Subscription{
+type SubOpt func(s *Subscription)
+
+func DurableName(durable string) SubOpt {
+	return func(s *Subscription) {
+		s.durableName = durable
+	}
+}
+
+func StartAtSequence(seq uint64) SubOpt {
+	return func(s *Subscription) {
+		s.lastSequence = seq
+	}
+}
+
+func NewSubscription(store *Store, cf *ColumnFamily, fn StoreHandler, opts ...SubOpt) *Subscription {
+	s := &Subscription{
 		store:        store,
-		durableName:  durableName,
-		lastSequence: startAt,
 		cf:           cf,
+		durableName:  "",
 		newTriggered: make(chan struct{}, 1),
 		isClosed:     false,
 		watchFn:      fn,
 	}
+
+	for _, o := range opts {
+		o(s)
+	}
+
+	// Load last sequence from store for durable name
+	if len(s.durableName) != 0 && s.lastSequence == 0 {
+		s.lastSequence, _ = store.GetDurableState(s.durableName)
+	}
+
+	return s
 }
 
 func (sub *Subscription) Close() {

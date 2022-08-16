@@ -37,6 +37,10 @@ func (request *SnapshotRequest) Get(collection []byte, key []byte) ([]byte, erro
 
 	value, closer, err := cfHandle.Db.Get(snapshotKey)
 	if err != nil {
+		if err == pebble.ErrNotFound {
+			return nil, ErrRecordNotFound
+		}
+
 		return nil, err
 	}
 
