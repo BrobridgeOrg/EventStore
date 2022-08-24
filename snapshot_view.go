@@ -49,16 +49,16 @@ func (sv *SnapshotView) keyUpperBound(b []byte) []byte {
 	return nil // no upper-bound
 }
 
+func (sv *SnapshotView) prefixIterOptions(prefix []byte) *pebble.IterOptions {
+	return &pebble.IterOptions{
+		LowerBound: prefix,
+		UpperBound: sv.keyUpperBound(prefix),
+	}
+}
+
 func (sv *SnapshotView) Fetch(collection []byte, key []byte, offset uint64, count int) ([]*Record, error) {
 
 	records := make([]*Record, 0, count)
-
-	prefixIterOptions := func(prefix []byte) *pebble.IterOptions {
-		return &pebble.IterOptions{
-			LowerBound: prefix,
-			UpperBound: sv.keyUpperBound(prefix),
-		}
-	}
 
 	// Prepare snapshot key
 	snapshotKey := bytes.Join([][]byte{
@@ -68,7 +68,7 @@ func (sv *SnapshotView) Fetch(collection []byte, key []byte, offset uint64, coun
 	prefix := snapshotKey[0 : len(snapshotKey)-len(key)]
 
 	// Create Iterator
-	iter := sv.nativeSnapshot.NewIter(prefixIterOptions(prefix))
+	iter := sv.nativeSnapshot.NewIter(sv.prefixIterOptions(prefix))
 
 	// Seek
 	iter.SeekGE(snapshotKey)
