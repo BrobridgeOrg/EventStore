@@ -37,26 +37,26 @@ func (sv *SnapshotView) Release() error {
 	return nil
 }
 
+func (sv *SnapshotView) keyUpperBound(b []byte) []byte {
+	end := make([]byte, len(b))
+	copy(end, b)
+	for i := len(end) - 1; i >= 0; i-- {
+		end[i] = end[i] + 1
+		if end[i] != 0 {
+			return end[:i+1]
+		}
+	}
+	return nil // no upper-bound
+}
+
 func (sv *SnapshotView) Fetch(collection []byte, key []byte, offset uint64, count int) ([]*Record, error) {
 
 	records := make([]*Record, 0, count)
 
-	keyUpperBound := func(b []byte) []byte {
-		end := make([]byte, len(b))
-		copy(end, b)
-		for i := len(end) - 1; i >= 0; i-- {
-			end[i] = end[i] + 1
-			if end[i] != 0 {
-				return end[:i+1]
-			}
-		}
-		return nil // no upper-bound
-	}
-
 	prefixIterOptions := func(prefix []byte) *pebble.IterOptions {
 		return &pebble.IterOptions{
 			LowerBound: prefix,
-			UpperBound: keyUpperBound(prefix),
+			UpperBound: sv.keyUpperBound(prefix),
 		}
 	}
 
