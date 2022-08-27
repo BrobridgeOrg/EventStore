@@ -75,15 +75,15 @@ func (sv *SnapshotView) Fetch(collection []byte, key []byte, offset uint64, coun
 	offsetCounter := offset
 	for i := 0; i < count && iter.Valid(); i++ {
 
-		// Getting key
-		recordKey := make([]byte, len(iter.Key())-len(prefix))
-		copy(recordKey, iter.Key()[len(prefix):])
-
 		if offsetCounter > 0 {
 			offsetCounter--
 			iter.Next()
 			continue
 		}
+
+		// Getting key
+		recordKey := make([]byte, len(iter.Key())-len(prefix))
+		copy(recordKey, iter.Key()[len(prefix):])
 
 		// Value
 		data := make([]byte, len(iter.Value()))
