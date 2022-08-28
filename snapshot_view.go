@@ -103,3 +103,21 @@ func (sv *SnapshotView) Fetch(collection []byte, key []byte, offset uint64, coun
 
 	return records, nil
 }
+
+func (sv *SnapshotView) Get(collection []byte, key []byte) ([]byte, error) {
+
+	// Prepare snapshot key
+	snapshotKey := bytes.Join([][]byte{
+		collection,
+		key,
+	}, []byte("-"))
+
+	v, closer, err := sv.nativeSnapshot.Get(snapshotKey)
+	if err != nil {
+		return nil, err
+	}
+
+	closer.Close()
+
+	return v, nil
+}

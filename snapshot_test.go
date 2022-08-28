@@ -51,6 +51,61 @@ func TestSnapshotWrite(t *testing.T) {
 	wg.Wait()
 }
 
+func TestSnapshotUpdate(t *testing.T) {
+
+	createTestEventStore("testing", true)
+	defer closeTestEventStore()
+
+	var wg sync.WaitGroup
+	store := createTestStore()
+
+	// Setup snapshot handler
+	testEventstore.SetSnapshotHandler(func(request *SnapshotRequest) error {
+
+		err := request.Upsert([]byte("testing"), []byte("testing_key"), request.Data, func(origin []byte, newValue []byte) []byte {
+			return Uint64ToBytes(BytesToUint64(origin) | BytesToUint64(newValue))
+		})
+
+		if err != nil {
+			t.Error(err)
+		}
+
+		wg.Done()
+
+		return nil
+	})
+
+	// Write to store
+	totalCount := 8
+	wg.Add(totalCount)
+	for i := 0; i < totalCount; i++ {
+
+		//		data := Uint64ToBytes(uint64(i))
+		input := make([]byte, 8)
+		input[i] = 1
+
+		if _, err := store.Write(input); err != nil {
+			t.Error(err)
+		}
+	}
+
+	wg.Wait()
+
+	// Create a new snapshot view
+	view := NewSnapshotView(store)
+	defer view.Release()
+	err := view.Initialize()
+	if err != nil {
+		panic(err)
+	}
+	data, err := view.Get([]byte("testing"), []byte("testing_key"))
+	if err != nil {
+		panic(err)
+	}
+
+	assert.Equal(t, []byte{1, 1, 1, 1, 1, 1, 1, 1}, data)
+}
+
 func TestSnapshotDelete(t *testing.T) {
 
 	createTestEventStore("testing", true)

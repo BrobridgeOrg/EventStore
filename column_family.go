@@ -24,11 +24,8 @@ type ColumnFamily struct {
 
 func NewColumnFamily(store *Store, name string) *ColumnFamily {
 	cf := &ColumnFamily{
-		Store: store,
-		Name:  name,
-		Merge: func(oldValue []byte, newValue []byte) []byte {
-			return newValue
-		},
+		Store:       store,
+		Name:        name,
 		closed:      make(chan struct{}),
 		isScheduled: 0,
 		timer:       time.NewTimer(time.Second * 10),
@@ -78,16 +75,18 @@ func (cf *ColumnFamily) Open() error {
 	opts := &pebble.Options{
 		Merger: &pebble.Merger{
 			Merge: func(key []byte, value []byte) (pebble.ValueMerger, error) {
-				m := &Merger{}
 
-				fn, ok := cf.mergers.LoadAndDelete(string(key))
+				v, ok := cf.mergers.Load(string(key))
 				if !ok {
-					m.SetHandler(cf.Merge)
-					return m, m.MergeNewer(value)
+					m := &Merger{}
+					m.MergeNewer(value)
+					return m, nil
 				}
 
-				m.SetHandler(fn.(func([]byte, []byte) []byte))
-				return m, m.MergeNewer(value)
+				m := v.(*Merger)
+				m.MergeNewer(value)
+
+				return m, nil
 			},
 		},
 		//		DisableWAL:    true,
@@ -159,5 +158,20 @@ func (cf *ColumnFamily) Write(key []byte, data []byte) error {
 }
 
 func (cf *ColumnFamily) RegisterMerger(key []byte, fn func([]byte, []byte) []byte) {
-	cf.mergers.Store(string(key), fn)
+	v, ok := cf.mergers.Load(string(key))
+	if !ok {
+		m := &Merger{
+			key:  key,
+			done: cf.UnregisterMerger,
+		}
+		m.SetHandler(fn)
+		cf.mergers.Store(string(key), m)
+		return
+	}
+
+	v.(*Merger).SetHandler(fn)
+}
+
+func (cf *ColumnFamily) UnregisterMerger(key []byte) {
+	cf.mergers.Delete(string(key))
 }
