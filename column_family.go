@@ -1,6 +1,7 @@
 package eventstore
 
 import (
+	"encoding/hex"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
@@ -76,11 +77,10 @@ func (cf *ColumnFamily) Open() error {
 		Merger: &pebble.Merger{
 			Merge: func(key []byte, value []byte) (pebble.ValueMerger, error) {
 
-				v, ok := cf.mergers.Load(string(key))
+				k := hex.EncodeToString(key)
+				v, ok := cf.mergers.Load(k)
 				if !ok {
-					m := &Merger{}
-					m.MergeNewer(value)
-					return m, nil
+					return nil, nil
 				}
 
 				m := v.(*Merger)
@@ -158,18 +158,18 @@ func (cf *ColumnFamily) Write(key []byte, data []byte) error {
 }
 
 func (cf *ColumnFamily) RegisterMerger(key []byte, fn func([]byte, []byte) []byte) {
-	v, ok := cf.mergers.Load(string(key))
+	k := hex.EncodeToString(key)
+	v, ok := cf.mergers.Load(k)
 	if !ok {
-		m := &Merger{
-			key:  key,
-			done: cf.UnregisterMerger,
-		}
-		m.SetHandler(fn)
-		cf.mergers.Store(string(key), m)
+		m := NewMerger()
+		m.key = key
+		m.done = cf.UnregisterMerger
+		m.mergeHandler = fn
+		cf.mergers.Store(k, m)
 		return
 	}
 
-	v.(*Merger).SetHandler(fn)
+	v.(*Merger).mergeHandler = fn
 }
 
 func (cf *ColumnFamily) UnregisterMerger(key []byte) {

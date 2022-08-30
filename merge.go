@@ -12,18 +12,22 @@ type Merger struct {
 	done         func([]byte)
 }
 
+func NewMerger() *Merger {
+	return &Merger{
+		mergeHandler: func(origin []byte, newValue []byte) []byte {
+			return newValue
+		},
+	}
+}
+
 func (m *Merger) MergeNewer(value []byte) error {
 	m.newValue = value
 	return nil
 }
 
-func (m *Merger) SetHandler(fn func(origin []byte, newValue []byte) []byte) {
-	m.mergeHandler = fn
-}
-
 func (m *Merger) MergeOlder(value []byte) error {
 
-	if m.oldValue == nil {
+	if len(m.oldValue) == 0 {
 		m.oldValue = value
 		return nil
 	}
@@ -37,10 +41,6 @@ func (m *Merger) Finish(includesBase bool) ([]byte, io.Closer, error) {
 
 	if m.done != nil {
 		m.done(m.key)
-	}
-
-	if m.mergeHandler == nil {
-		return m.newValue, nil, nil
 	}
 
 	return m.mergeHandler(m.oldValue, m.newValue), nil, nil

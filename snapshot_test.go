@@ -180,16 +180,20 @@ func TestSnapshotViewFetch(t *testing.T) {
 
 	// Write to strore
 	totalCount := 200000
+	pipelineCount := 10
+	quotaPerPipeline := totalCount / pipelineCount
 	wg.Add(totalCount)
-	for i := 0; i < totalCount/20000; i++ {
+	for i := 0; i < pipelineCount; i++ {
+
 		go func(base uint64) {
-			for i := base; i < base+20000; i++ {
+			end := base + uint64(quotaPerPipeline)
+			for i := base; i < end; i++ {
 				data := Uint64ToBytes(i + 1)
 				if _, err := store.Write(data); err != nil {
 					t.Error(err)
 				}
 			}
-		}(uint64(i * 20000))
+		}(uint64(quotaPerPipeline * i))
 	}
 
 	wg.Wait()
