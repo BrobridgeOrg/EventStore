@@ -64,8 +64,20 @@ func (request *SnapshotRequest) Upsert(collection []byte, key []byte, value []by
 		key,
 	}, []byte("-"))
 
-	cfHandle.RegisterMerger(snapshotKey, fn)
-	err = cfHandle.Db.Merge(snapshotKey, value, pebble.NoSync)
+	oldValue, closer, err := cfHandle.Db.Get(snapshotKey)
+	if err != nil {
+		if err != pebble.ErrNotFound {
+			return err
+		}
+	}
+
+	if closer != nil {
+		defer closer.Close()
+	}
+
+	//fmt.Println(oldValue, value)
+
+	err = cfHandle.Db.Set(snapshotKey, fn(oldValue, value), pebble.NoSync)
 	if err != nil {
 		return err
 	}

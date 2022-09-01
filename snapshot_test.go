@@ -63,6 +63,11 @@ func TestSnapshotUpdate(t *testing.T) {
 	testEventstore.SetSnapshotHandler(func(request *SnapshotRequest) error {
 
 		err := request.Upsert([]byte("testing"), []byte("testing_key"), request.Data, func(origin []byte, newValue []byte) []byte {
+
+			if len(origin) == 0 {
+				return newValue
+			}
+
 			return Uint64ToBytes(BytesToUint64(origin) | BytesToUint64(newValue))
 		})
 
@@ -95,6 +100,75 @@ func TestSnapshotUpdate(t *testing.T) {
 	view := NewSnapshotView(store)
 	defer view.Release()
 	err := view.Initialize()
+	if err != nil {
+		panic(err)
+	}
+	data, err := view.Get([]byte("testing"), []byte("testing_key"))
+	if err != nil {
+		panic(err)
+	}
+
+	assert.Equal(t, []byte{1, 1, 1, 1, 1, 1, 1, 1}, data)
+}
+
+func TestSnapshotUpdateReopen(t *testing.T) {
+
+	createTestEventStore("testing", true)
+	defer closeTestEventStore()
+
+	var wg sync.WaitGroup
+	store := createTestStore()
+
+	// Setup snapshot handler
+	testEventstore.SetSnapshotHandler(func(request *SnapshotRequest) error {
+
+		err := request.Upsert([]byte("testing"), []byte("testing_key"), request.Data, func(origin []byte, newValue []byte) []byte {
+
+			if len(origin) == 0 {
+				return newValue
+			}
+
+			return Uint64ToBytes(BytesToUint64(origin) | BytesToUint64(newValue))
+		})
+
+		if err != nil {
+			t.Error(err)
+		}
+
+		wg.Done()
+
+		return nil
+	})
+
+	// Write to store
+	totalCount := 8
+	wg.Add(totalCount)
+	for i := 0; i < totalCount; i++ {
+
+		input := make([]byte, 8)
+		input[i] = 1
+
+		if _, err := store.Write(input); err != nil {
+			t.Error(err)
+		}
+	}
+
+	wg.Wait()
+
+	// Release current store
+	storeName := store.name
+	store.Close()
+
+	// Re-open store
+	store, err := testEventstore.GetStore(storeName)
+	if err != nil {
+		panic(err)
+	}
+
+	// Create a new snapshot view
+	view := NewSnapshotView(store)
+	defer view.Release()
+	err = view.Initialize()
 	if err != nil {
 		panic(err)
 	}
@@ -198,20 +272,32 @@ func TestSnapshotViewFetch(t *testing.T) {
 
 	wg.Wait()
 
+	assert.Equal(t, uint64(totalCount), snapshotCounter)
+
+	// Release current store
+	storeName := store.name
+	store.Close()
+
+	// Re-open store
+	store, err := testEventstore.GetStore(storeName)
+	if err != nil {
+		panic(err)
+	}
+
 	// Create a new snapshot view
 	view := NewSnapshotView(store)
 	defer view.Release()
-	err := view.Initialize()
+	err = view.Initialize()
 	if err != nil {
 		panic(err)
 	}
 
 	targetKey := uint64(0)
-	for targetKey < snapshotCounter {
-
+	offset := uint64(0)
+	for {
 		findKey := Uint64ToBytes(targetKey)
-		offset := uint64(0)
-		if targetKey > 0 {
+
+		if targetKey > uint64(0) {
 			offset = 1
 		}
 
@@ -220,18 +306,21 @@ func TestSnapshotViewFetch(t *testing.T) {
 			t.Error(err)
 		}
 
+		if len(records) == 0 {
+			break
+		}
+
 		for _, record := range records {
 			targetKey++
 
 			key := Uint64ToBytes(targetKey)
 
-			assert.Equal(t, key, record.Data)
 			assert.Equal(t, key, record.Key)
+			assert.Equal(t, key, record.Data)
 
 			record.Release()
 		}
 	}
 
-	assert.Equal(t, uint64(totalCount), snapshotCounter)
 	assert.Equal(t, uint64(totalCount), targetKey)
 }

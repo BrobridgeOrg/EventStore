@@ -13,14 +13,12 @@ $ go test -v -bench Benchmark -run Benchmark
 goos: darwin
 goarch: amd64
 pkg: github.com/BrobridgeOrg/EventStore
-BenchmarkWrite
-BenchmarkWrite-16                  	  514297	      2336 ns/op
-BenchmarkEventThroughput
-BenchmarkEventThroughput-16        	  223045	      5077 ns/op
-BenchmarkSnapshotPerformance
-BenchmarkSnapshotPerformance-16    	  108236	     11125 ns/op
+cpu: Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
+BenchmarkWrite-16                  	  382582	      3211 ns/op
+BenchmarkEventThroughput-16        	  164775	      7871 ns/op
+BenchmarkSnapshotPerformance-16    	   57495	     18151 ns/op
 PASS
-ok  	github.com/BrobridgeOrg/EventStore	15.152s
+ok  	github.com/BrobridgeOrg/EventStore	36.917s
 ```
 
 ## License

@@ -2,8 +2,8 @@ package eventstore
 
 import (
 	"encoding/hex"
+	"fmt"
 	"path/filepath"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -14,10 +14,9 @@ type ColumnFamily struct {
 	Store *Store
 	Db    *pebble.DB
 	Name  string
-	Merge func([]byte, []byte) []byte
 
-	mergers sync.Map
-	closed  chan struct{}
+	merge  func([]byte, []byte) []byte
+	closed chan struct{}
 
 	isScheduled uint32
 	timer       *time.Timer
@@ -30,6 +29,9 @@ func NewColumnFamily(store *Store, name string) *ColumnFamily {
 		closed:      make(chan struct{}),
 		isScheduled: 0,
 		timer:       time.NewTimer(time.Second * 10),
+		merge: func(oldValue []byte, newValue []byte) []byte {
+			return newValue
+		},
 	}
 
 	cf.timer.Stop()
@@ -74,21 +76,6 @@ func (cf *ColumnFamily) requestSync() {
 func (cf *ColumnFamily) Open() error {
 
 	opts := &pebble.Options{
-		Merger: &pebble.Merger{
-			Merge: func(key []byte, value []byte) (pebble.ValueMerger, error) {
-
-				k := hex.EncodeToString(key)
-				v, ok := cf.mergers.Load(k)
-				if !ok {
-					return nil, nil
-				}
-
-				m := v.(*Merger)
-				m.MergeNewer(value)
-
-				return m, nil
-			},
-		},
 		//		DisableWAL:    true,
 		MaxOpenFiles:  -1,
 		LBaseMaxBytes: 512 << 20,
@@ -158,20 +145,17 @@ func (cf *ColumnFamily) Write(key []byte, data []byte) error {
 }
 
 func (cf *ColumnFamily) RegisterMerger(key []byte, fn func([]byte, []byte) []byte) {
-	k := hex.EncodeToString(key)
-	v, ok := cf.mergers.Load(k)
-	if !ok {
-		m := NewMerger()
-		m.key = key
-		m.done = cf.UnregisterMerger
-		m.mergeHandler = fn
-		cf.mergers.Store(k, m)
-		return
-	}
-
-	v.(*Merger).mergeHandler = fn
+	cf.merge = fn
 }
 
-func (cf *ColumnFamily) UnregisterMerger(key []byte) {
-	cf.mergers.Delete(string(key))
+func (cf *ColumnFamily) mergerHandler(key []byte, value []byte) (pebble.ValueMerger, error) {
+
+	k := hex.EncodeToString(key)
+	fmt.Println(k)
+
+	m := NewMerger()
+	m.mergeHandler = cf.merge
+	m.MergeNewer(value)
+
+	return m, nil
 }

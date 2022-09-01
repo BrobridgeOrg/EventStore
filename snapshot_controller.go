@@ -131,11 +131,18 @@ func (ss *SnapshotController) RecoverSnapshot(store *Store) error {
 		return err
 	}
 
+	lastSeq := BytesToUint64(value)
+
 	iter := cfHandle.Db.NewIter(nil)
 	iter.SeekGE(value)
 	closer.Close()
 	for ; iter.Valid(); iter.Next() {
+
 		seq := BytesToUint64(iter.Key())
+
+		if seq == lastSeq {
+			continue
+		}
 
 		data := make([]byte, len(iter.Value()))
 		copy(data, iter.Value())
