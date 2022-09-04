@@ -3,6 +3,7 @@ package eventstore
 import (
 	"errors"
 	"fmt"
+	"sync/atomic"
 
 	"github.com/cfsghost/gosharding"
 	"github.com/cockroachdb/pebble"
@@ -88,6 +89,9 @@ func (ss *SnapshotController) updateSnapshotState(req *SnapshotRequest) error {
 		return err
 	}
 
+	// Update store property
+	atomic.StoreUint64((*uint64)(&req.Store.snapshotLastSeq), req.Sequence)
+
 	return nil
 }
 
@@ -132,6 +136,9 @@ func (ss *SnapshotController) RecoverSnapshot(store *Store) error {
 	}
 
 	lastSeq := BytesToUint64(value)
+
+	// Update store property
+	atomic.StoreUint64((*uint64)(&store.snapshotLastSeq), lastSeq)
 
 	iter := cfHandle.Db.NewIter(nil)
 	iter.SeekGE(value)

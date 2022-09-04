@@ -5,17 +5,19 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 
 	"github.com/cockroachdb/pebble"
 )
 
 type Store struct {
-	counter        Counter
-	eventstore     *EventStore
-	options        *Options
-	name           string
-	dbPath         string
-	columnFamilies map[string]*ColumnFamily
+	counter         Counter
+	eventstore      *EventStore
+	options         *Options
+	name            string
+	dbPath          string
+	columnFamilies  map[string]*ColumnFamily
+	snapshotLastSeq uint64
 
 	subscriptions sync.Map
 }
@@ -222,6 +224,10 @@ func (store *Store) DispatchEvent() {
 		sub.Trigger()
 		return true
 	})
+}
+
+func (store *Store) GetSnapshotLastSequence() uint64 {
+	return atomic.LoadUint64((*uint64)(&store.snapshotLastSeq))
 }
 
 func (store *Store) GetLastSequence() uint64 {

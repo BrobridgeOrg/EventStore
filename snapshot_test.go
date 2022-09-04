@@ -49,6 +49,8 @@ func TestSnapshotWrite(t *testing.T) {
 	}
 
 	wg.Wait()
+
+	assert.Equal(t, uint64(1), store.GetSnapshotLastSequence())
 }
 
 func TestSnapshotUpdate(t *testing.T) {
@@ -323,4 +325,5 @@ func TestSnapshotViewFetch(t *testing.T) {
 	}
 
 	assert.Equal(t, uint64(totalCount), targetKey)
+	assert.Equal(t, uint64(totalCount), store.GetSnapshotLastSequence())
 }
