@@ -21,6 +21,10 @@ func BytesToUint64(data []byte) uint64 {
 	return uint64(binary.BigEndian.Uint64(data))
 }
 
+func BytesToString(b []byte) string {
+	return *(*string)(unsafe.Pointer(&b))
+}
+
 func StrToBytes(s string) []byte {
 	x := (*[2]uintptr)(unsafe.Pointer(&s))
 	h := [3]uintptr{x[0], x[1], x[1]}

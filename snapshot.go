@@ -7,6 +7,27 @@ import (
 	"github.com/cockroachdb/pebble"
 )
 
+var colEntryCache sync.Map
+
+func assertColEntry(collection []byte) []byte {
+
+	key := BytesToString(collection)
+
+	v, ok := colEntryCache.Load(key)
+	if ok {
+		return v.([]byte)
+	}
+
+	entry := bytes.Join([][]byte{
+		collection,
+		[]byte("seq"),
+	}, []byte("-"))
+
+	colEntryCache.Store(key, entry)
+
+	return entry
+}
+
 type SnapshotRequest struct {
 	Sequence uint64
 	Store    *Store
@@ -100,10 +121,7 @@ func (request *SnapshotRequest) updateDurableState(batch *pebble.Batch, collecti
 
 	// Update snapshot state
 	seqData := Uint64ToBytes(request.Sequence)
-	lastSequenceKey := bytes.Join([][]byte{
-		collection,
-		[]byte("seq"),
-	}, []byte("-"))
+	lastSequenceKey := assertColEntry(collection)
 
 	if batch == nil {
 		err = stateHandle.Db.Set(lastSequenceKey, seqData, pebble.NoSync)
