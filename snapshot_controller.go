@@ -32,6 +32,8 @@ func (ss *SnapshotController) initialize() error {
 	options.Handler = func(id int32, data interface{}) {
 
 		req := data.(*SnapshotRequest)
+		defer snapshotRequestPool.Put(req)
+
 		err := ss.handleRequest(req)
 		if err != nil {
 			fmt.Println(err)
@@ -70,7 +72,6 @@ func (ss *SnapshotController) handle(req *SnapshotRequest) error {
 	}
 
 	err := ss.handler(req)
-	snapshotRequestPool.Put(req)
 
 	return err
 }
