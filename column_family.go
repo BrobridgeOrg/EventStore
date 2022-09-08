@@ -1,8 +1,6 @@
 package eventstore
 
 import (
-	"encoding/hex"
-	"fmt"
 	"path/filepath"
 	"sync/atomic"
 	"time"
@@ -142,20 +140,4 @@ func (cf *ColumnFamily) Write(key []byte, data []byte) error {
 	cf.requestSync()
 
 	return nil
-}
-
-func (cf *ColumnFamily) RegisterMerger(key []byte, fn func([]byte, []byte) []byte) {
-	cf.merge = fn
-}
-
-func (cf *ColumnFamily) mergerHandler(key []byte, value []byte) (pebble.ValueMerger, error) {
-
-	k := hex.EncodeToString(key)
-	fmt.Println(k)
-
-	m := NewMerger()
-	m.mergeHandler = cf.merge
-	m.MergeNewer(value)
-
-	return m, nil
 }
