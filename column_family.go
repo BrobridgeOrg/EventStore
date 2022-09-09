@@ -1,12 +1,18 @@
 package eventstore
 
 import (
+	"bytes"
 	"path/filepath"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/pebble"
 )
+
+type ListOptions struct {
+	Prefix           []byte
+	WithoutRawPrefix bool
+}
 
 type ColumnFamily struct {
 	Store *Store
@@ -140,4 +146,57 @@ func (cf *ColumnFamily) Write(key []byte, data []byte) error {
 	cf.requestSync()
 
 	return nil
+}
+
+func (cf *ColumnFamily) List(rawPrefix []byte, targetPrimaryKey []byte, opts *ListOptions) (*Cursor, error) {
+
+	iterOpts := &pebble.IterOptions{}
+
+	prefix := []byte("")
+	if opts != nil && len(opts.Prefix) > 0 {
+
+		prefix = opts.Prefix
+
+		// Configuring upper bound
+		upperBound := make([]byte, len(opts.Prefix))
+		copy(upperBound, opts.Prefix)
+		upperBound[len(upperBound)-1] = byte(int(upperBound[len(upperBound)-1]) + 1)
+
+		fullUpperBound := bytes.Join([][]byte{
+			rawPrefix,
+			upperBound,
+		}, []byte(""))
+
+		iterOpts.UpperBound = fullUpperBound
+	} else if len(rawPrefix) > 0 {
+
+		// Configuring upper bound
+		upperBound := make([]byte, len(rawPrefix))
+		copy(upperBound, rawPrefix)
+		upperBound[len(upperBound)-1] = byte(int(upperBound[len(upperBound)-1]) + 1)
+
+		fullUpperBound := bytes.Join([][]byte{
+			upperBound,
+		}, []byte(""))
+
+		iterOpts.UpperBound = fullUpperBound
+	}
+
+	targetKey := bytes.Join([][]byte{
+		rawPrefix,
+		prefix,
+		targetPrimaryKey,
+	}, []byte(""))
+
+	iter := cf.Db.NewIter(iterOpts)
+
+	iter.SeekGE(targetKey)
+
+	cur := &Cursor{
+		prefix: rawPrefix,
+		isRaw:  !opts.WithoutRawPrefix,
+		iter:   iter,
+	}
+
+	return cur, nil
 }

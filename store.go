@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"sync"
 	"sync/atomic"
-
-	"github.com/cockroachdb/pebble"
 )
 
 type Store struct {
@@ -235,45 +233,11 @@ func (store *Store) GetLastSequence() uint64 {
 }
 
 func (store *Store) GetDurableState(durableName string) (uint64, error) {
-
-	cfHandle, err := store.GetColumnFamailyHandle("states")
-	if err != nil {
-		return 0, err
-	}
-
-	// Write
-	value, closer, err := cfHandle.Db.Get(StrToBytes(durableName))
-	if err != nil {
-		if err == pebble.ErrNotFound {
-			return 0, nil
-		}
-
-		return 0, err
-	}
-
-	lastSeq := BytesToUint64(value)
-
-	closer.Close()
-
-	return lastSeq, nil
+	return store.GetStateUint64([]byte("durable"), StrToBytes(durableName), []byte("lastseq"))
 }
 
 func (store *Store) UpdateDurableState(durableName string, lastSeq uint64) error {
-
-	cfHandle, err := store.GetColumnFamailyHandle("states")
-	if err != nil {
-		return err
-	}
-
-	value := Uint64ToBytes(lastSeq)
-
-	// Write
-	err = cfHandle.Write(StrToBytes(durableName), value)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return store.SetStateUint64([]byte("durable"), StrToBytes(durableName), []byte("lastseq"), lastSeq)
 }
 
 func (store *Store) registerSubscription(sub *Subscription) error {
