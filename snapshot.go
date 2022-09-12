@@ -1,37 +1,16 @@
 package eventstore
 
 import (
-	"bytes"
 	"sync"
 
 	"github.com/cockroachdb/pebble"
 )
 
-var colEntryCache sync.Map
-
-func assertColEntry(collection []byte) []byte {
-
-	key := BytesToString(collection)
-
-	v, ok := colEntryCache.Load(key)
-	if ok {
-		return v.([]byte)
-	}
-
-	entry := bytes.Join([][]byte{
-		collection,
-		[]byte("seq"),
-	}, []byte("-"))
-
-	colEntryCache.Store(key, entry)
-
-	return entry
-}
-
 type SnapshotRequest struct {
 	Sequence uint64
 	Store    *Store
 	Data     []byte
+	Batch    *pebble.Batch
 }
 
 var snapshotRequestPool = sync.Pool{
@@ -46,17 +25,12 @@ func NewSnapshotRequest() *SnapshotRequest {
 
 func (request *SnapshotRequest) Get(collection []byte, key []byte) ([]byte, error) {
 
-	cfHandle, err := request.Store.GetColumnFamailyHandle("snapshot")
-	if err != nil {
-		return nil, err
-	}
-
-	snapshotKey := bytes.Join([][]byte{
+	snapshotKey := genSnapshotKey(
 		collection,
 		key,
-	}, []byte("-"))
+	)
 
-	value, closer, err := cfHandle.Db.Get(snapshotKey)
+	value, closer, err := request.Store.cfSnapshot.Get(snapshotKey)
 	if err != nil {
 		if err == pebble.ErrNotFound {
 			return nil, ErrRecordNotFound
@@ -75,17 +49,12 @@ func (request *SnapshotRequest) Get(collection []byte, key []byte) ([]byte, erro
 
 func (request *SnapshotRequest) Upsert(collection []byte, key []byte, value []byte, fn func([]byte, []byte) []byte) error {
 
-	cfHandle, err := request.Store.GetColumnFamailyHandle("snapshot")
-	if err != nil {
-		return err
-	}
-
-	snapshotKey := bytes.Join([][]byte{
+	snapshotKey := genSnapshotKey(
 		collection,
 		key,
-	}, []byte("-"))
+	)
 
-	oldValue, closer, err := cfHandle.Db.Get(snapshotKey)
+	oldValue, closer, err := request.Store.cfSnapshot.Get(snapshotKey)
 	if err != nil {
 		if err != pebble.ErrNotFound {
 			return err
@@ -98,7 +67,7 @@ func (request *SnapshotRequest) Upsert(collection []byte, key []byte, value []by
 
 	//fmt.Println(oldValue, value)
 
-	err = cfHandle.Db.Set(snapshotKey, fn(oldValue, value), pebble.NoSync)
+	err = request.Store.cfSnapshot.Write(nil, snapshotKey, fn(oldValue, value))
 	if err != nil {
 		return err
 	}
@@ -109,64 +78,41 @@ func (request *SnapshotRequest) Upsert(collection []byte, key []byte, value []by
 		return err
 	}
 
+	request.Store.requestSync()
+
 	return nil
 }
 
-func (request *SnapshotRequest) updateDurableState(batch *pebble.Batch, collection []byte) error {
-
-	stateHandle, err := request.Store.GetColumnFamailyHandle("snapshot_states")
-	if err != nil {
-		return err
-	}
+func (request *SnapshotRequest) updateDurableState(b *pebble.Batch, collection []byte) error {
 
 	// Update snapshot state
-	seqData := Uint64ToBytes(request.Sequence)
-	lastSequenceKey := assertColEntry(collection)
-
-	if batch == nil {
-		err = stateHandle.Db.Set(lastSequenceKey, seqData, pebble.NoSync)
-		if err != nil {
-			return err
-		}
-	} else {
-		batch.Set(lastSequenceKey, seqData, pebble.NoSync)
-	}
-
-	return nil
+	return request.Store.SetStateUint64(b, []byte("snapshot"), collection, []byte("lastseq"), request.Sequence)
 }
 
-func (request *SnapshotRequest) UpdateDurableState(collection []byte) error {
-	return request.updateDurableState(nil, collection)
+func (request *SnapshotRequest) UpdateDurableState(b *pebble.Batch, collection []byte) error {
+	return request.updateDurableState(b, collection)
 }
 
 func (request *SnapshotRequest) Delete(collection []byte, key []byte) error {
 
-	cfHandle, err := request.Store.GetColumnFamailyHandle("snapshot")
-	if err != nil {
-		return err
-	}
-
-	snapshotKey := bytes.Join([][]byte{
+	snapshotKey := genSnapshotKey(
 		collection,
 		key,
-	}, []byte("-"))
+	)
 
-	err = cfHandle.Db.Delete(snapshotKey, pebble.NoSync)
+	err := request.Store.cfSnapshot.Delete(snapshotKey)
 	if err != nil {
 		return err
 	}
+
+	request.Store.requestSync()
 
 	return nil
 }
 
 func (request *SnapshotRequest) write(collection []byte, key []byte, data []byte) error {
 
-	cfHandle, err := request.Store.GetColumnFamailyHandle("snapshot")
-	if err != nil {
-		return err
-	}
-
-	err = cfHandle.Db.Set(key, data, pebble.NoSync)
+	err := request.Store.cfSnapshot.Write(nil, key, data)
 	if err != nil {
 		return err
 	}
@@ -176,6 +122,8 @@ func (request *SnapshotRequest) write(collection []byte, key []byte, data []byte
 	if err != nil {
 		return err
 	}
+
+	request.Store.requestSync()
 
 	return nil
 }

@@ -1,6 +1,7 @@
 package eventstore
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"sync/atomic"
@@ -8,6 +9,13 @@ import (
 	"github.com/cfsghost/gosharding"
 	"github.com/cockroachdb/pebble"
 )
+
+func genSnapshotKey(collection []byte, key []byte) []byte {
+	return bytes.Join([][]byte{
+		collection,
+		key,
+	}, []byte("."))
+}
 
 type SnapshotController struct {
 	options *SnapshotOptions
@@ -78,14 +86,7 @@ func (ss *SnapshotController) handle(req *SnapshotRequest) error {
 
 func (ss *SnapshotController) updateSnapshotState(req *SnapshotRequest) error {
 
-	stateHandle, err := req.Store.GetColumnFamailyHandle("snapshot_states")
-	if err != nil {
-		return err
-	}
-
-	// Update snapshot state
-	seqData := Uint64ToBytes(req.Sequence)
-	err = stateHandle.Db.Set([]byte("_state"), seqData, pebble.NoSync)
+	err := req.Store.SetStateUint64(req.Batch, []byte("event"), []byte("snapshot"), []byte("lastseq"), req.Sequence)
 	if err != nil {
 		return err
 	}
@@ -100,13 +101,14 @@ func (ss *SnapshotController) SetHandler(fn func(*SnapshotRequest) error) {
 	ss.handler = fn
 }
 
-func (ss *SnapshotController) Request(store *Store, seq uint64, data []byte) error {
+func (ss *SnapshotController) Request(b *pebble.Batch, store *Store, seq uint64, data []byte) error {
 
 	// Create a new snapshot request
 	req := snapshotRequestPool.Get().(*SnapshotRequest)
 	req.Store = store
 	req.Sequence = seq
 	req.Data = data
+	req.Batch = b
 
 	ss.shard.PushKV(store.name, req)
 
@@ -115,45 +117,34 @@ func (ss *SnapshotController) Request(store *Store, seq uint64, data []byte) err
 
 func (ss *SnapshotController) RecoverSnapshot(store *Store) error {
 
-	stateHandle, err := store.GetColumnFamailyHandle("snapshot_states")
-	if err != nil {
+	// Loading last sequence of snapshot
+	lastSeq, err := store.GetStateUint64([]byte("event"), []byte("snapshot"), []byte("lastseq"))
+	if err != nil && err != ErrStateEntryNotFound {
 		return err
 	}
-
-	value, closer, err := stateHandle.Db.Get([]byte("_state"))
-	if err != nil {
-		if err == pebble.ErrNotFound {
-			return nil
-		}
-
-		return err
-	}
-
-	defer closer.Close()
-
-	cfHandle, err := store.GetColumnFamailyHandle("events")
-	if err != nil {
-		return err
-	}
-
-	lastSeq := BytesToUint64(value)
 
 	// Update store property
 	atomic.StoreUint64((*uint64)(&store.snapshotLastSeq), lastSeq)
 
-	iter := cfHandle.Db.NewIter(nil)
-	iter.SeekGE(value)
-	closer.Close()
-	for ; iter.Valid(); iter.Next() {
+	key := Uint64ToBytes(lastSeq)
 
-		seq := BytesToUint64(iter.Key())
+	cur, err := store.cfEvent.List([]byte(""), key, &ListOptions{
+		WithoutRawPrefix: true,
+	})
+	if err != nil {
+		return err
+	}
+
+	for ; !cur.EOF(); cur.Next() {
+
+		seq := BytesToUint64(cur.GetKey())
 
 		if seq == lastSeq {
 			continue
 		}
 
-		data := make([]byte, len(iter.Value()))
-		copy(data, iter.Value())
+		data := make([]byte, len(cur.GetData()))
+		copy(data, cur.GetData())
 
 		// Create a new snapshot request
 		req := snapshotRequestPool.Get().(*SnapshotRequest)
@@ -169,9 +160,10 @@ func (ss *SnapshotController) RecoverSnapshot(store *Store) error {
 
 		// Release
 		snapshotRequestPool.Put(req)
+
 	}
 
-	iter.Close()
+	cur.Close()
 
 	return nil
 }

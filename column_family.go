@@ -2,11 +2,14 @@ package eventstore
 
 import (
 	"bytes"
-	"path/filepath"
-	"sync/atomic"
-	"time"
+	"errors"
+	"io"
 
 	"github.com/cockroachdb/pebble"
+)
+
+var (
+	ErrInvalidKey = errors.New("EventStore: invalid key")
 )
 
 type ListOptions struct {
@@ -15,151 +18,96 @@ type ListOptions struct {
 }
 
 type ColumnFamily struct {
-	Store *Store
-	Db    *pebble.DB
-	Name  string
-
-	merge  func([]byte, []byte) []byte
-	closed chan struct{}
-
-	isScheduled uint32
-	timer       *time.Timer
+	Store  *Store
+	Name   string
+	Symbol []byte
+	Prefix []byte
 }
 
-func NewColumnFamily(store *Store, name string) *ColumnFamily {
+func NewColumnFamily(store *Store, name string, symbol []byte) *ColumnFamily {
 	cf := &ColumnFamily{
-		Store:       store,
-		Name:        name,
-		closed:      make(chan struct{}),
-		isScheduled: 0,
-		timer:       time.NewTimer(time.Second * 10),
-		merge: func(oldValue []byte, newValue []byte) []byte {
-			return newValue
-		},
+		Store:  store,
+		Name:   name,
+		Symbol: symbol,
 	}
 
-	cf.timer.Stop()
+	cf.Prefix = append(symbol, []byte(":")...)
 
 	return cf
 }
 
-func (cf *ColumnFamily) sync() {
+func (cf *ColumnFamily) genRawKey(key []byte) ([]byte, error) {
 
-	cf.timer.Reset(time.Second * 10)
-
-	for {
-
-		select {
-		case <-cf.timer.C:
-			cf.Db.LogData(nil, pebble.Sync)
-
-			cf.timer.Stop()
-			cf.timer.Reset(time.Second * 10)
-
-			atomic.StoreUint32(&cf.isScheduled, 0)
-		case <-cf.closed:
-			cf.timer.Stop()
-			close(cf.closed)
-			return
-		}
+	if len(key) == 0 {
+		return nil, ErrInvalidKey
 	}
+
+	return append(cf.Prefix, key...), nil
 }
 
-func (cf *ColumnFamily) requestSync() {
+func (cf *ColumnFamily) Get(key []byte) ([]byte, io.Closer, error) {
 
-	if atomic.LoadUint32(&cf.isScheduled) != 0 {
-		return
-	}
-
-	atomic.StoreUint32(&cf.isScheduled, 1)
-
-	cf.timer.Stop()
-	cf.timer.Reset(time.Millisecond * 100)
-}
-
-func (cf *ColumnFamily) Open() error {
-
-	opts := &pebble.Options{
-		//		DisableWAL:    true,
-		MaxOpenFiles:  -1,
-		LBaseMaxBytes: 512 << 20,
-	}
-
-	// Initialize 4 levels
-	opts.Levels = make([]pebble.LevelOptions, 8)
-	for i := range opts.Levels {
-		l := &opts.Levels[i]
-
-		// Level 0
-		l.Compression = pebble.SnappyCompression
-		l.BlockSize = 32 << 10      // 32MB
-		l.TargetFileSize = 64 << 20 // 64MB
-
-		if i > 0 {
-			l.Compression = pebble.SnappyCompression
-			l.TargetFileSize = opts.Levels[i-1].TargetFileSize * 2
-		}
-
-		opts.Levels[i].EnsureDefaults()
-	}
-
-	opts.EnsureDefaults()
-
-	dbPath := filepath.Join(cf.Store.dbPath, cf.Name)
-	db, err := pebble.Open(dbPath, opts)
+	rk, err := cf.genRawKey(key)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 
-	cf.Db = db
-
-	go cf.sync()
-
-	return nil
-}
-
-func (cf *ColumnFamily) Close() error {
-	cf.closed <- struct{}{}
-	cf.Db.LogData(nil, pebble.Sync)
-	return cf.Db.Close()
+	return cf.Store.db.Get(rk)
 }
 
 func (cf *ColumnFamily) Delete(key []byte) error {
 
-	err := cf.Db.Delete(key, pebble.NoSync)
+	rk, err := cf.genRawKey(key)
 	if err != nil {
 		return err
 	}
 
-	cf.requestSync()
-
-	return nil
-}
-
-func (cf *ColumnFamily) Write(key []byte, data []byte) error {
-
-	err := cf.Db.Set(key, data, pebble.NoSync)
+	err = cf.Store.db.Delete(rk, pebble.NoSync)
 	if err != nil {
 		return err
 	}
 
-	cf.requestSync()
+	return nil
+}
+
+func (cf *ColumnFamily) Write(b *pebble.Batch, key []byte, data []byte) error {
+
+	rk, err := cf.genRawKey(key)
+	if err != nil {
+		return err
+	}
+
+	// Batch
+	if b != nil {
+		err = b.Set(rk, data, pebble.NoSync)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	err = cf.Store.db.Set(rk, data, pebble.NoSync)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
 
-func (cf *ColumnFamily) List(rawPrefix []byte, targetPrimaryKey []byte, opts *ListOptions) (*Cursor, error) {
+func (cf *ColumnFamily) list(rawPrefix []byte, targetPrimaryKey []byte, opts *ListOptions) (*Cursor, error) {
 
 	iterOpts := &pebble.IterOptions{}
 
+	rawPrefix = append(cf.Prefix, rawPrefix...)
 	prefix := []byte("")
 	if opts != nil && len(opts.Prefix) > 0 {
 
-		prefix = opts.Prefix
+		prefix = append(cf.Prefix, prefix...)
 
 		// Configuring upper bound
-		upperBound := make([]byte, len(opts.Prefix))
-		copy(upperBound, opts.Prefix)
+		upperBound := make([]byte, len(prefix))
+		copy(upperBound, prefix)
 		upperBound[len(upperBound)-1] = byte(int(upperBound[len(upperBound)-1]) + 1)
 
 		fullUpperBound := bytes.Join([][]byte{
@@ -188,7 +136,7 @@ func (cf *ColumnFamily) List(rawPrefix []byte, targetPrimaryKey []byte, opts *Li
 		targetPrimaryKey,
 	}, []byte(""))
 
-	iter := cf.Db.NewIter(iterOpts)
+	iter := cf.Store.db.NewIter(iterOpts)
 
 	iter.SeekGE(targetKey)
 
@@ -199,4 +147,8 @@ func (cf *ColumnFamily) List(rawPrefix []byte, targetPrimaryKey []byte, opts *Li
 	}
 
 	return cur, nil
+}
+
+func (cf *ColumnFamily) List(rawPrefix []byte, targetPrimaryKey []byte, opts *ListOptions) (*Cursor, error) {
+	return cf.list(rawPrefix, targetPrimaryKey, opts)
 }

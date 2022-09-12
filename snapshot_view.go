@@ -1,8 +1,6 @@
 package eventstore
 
 import (
-	"bytes"
-
 	"github.com/cockroachdb/pebble"
 )
 
@@ -18,13 +16,7 @@ func NewSnapshotView(store *Store) *SnapshotView {
 }
 
 func (sv *SnapshotView) Initialize() error {
-
-	cfHandle, err := sv.store.GetColumnFamailyHandle("snapshot")
-	if err != nil {
-		return err
-	}
-
-	sv.nativeSnapshot = cfHandle.Db.NewSnapshot()
+	sv.nativeSnapshot = sv.store.db.NewSnapshot()
 
 	return nil
 }
@@ -61,17 +53,23 @@ func (sv *SnapshotView) Fetch(collection []byte, key []byte, offset uint64, coun
 	records := make([]*Record, 0, count)
 
 	// Prepare snapshot key
-	snapshotKey := bytes.Join([][]byte{
+	snapshotKey := genSnapshotKey(
 		collection,
 		key,
-	}, []byte("-"))
-	prefix := snapshotKey[0 : len(snapshotKey)-len(key)]
+	)
+
+	rk, err := sv.store.cfSnapshot.genRawKey(snapshotKey)
+	if err != nil {
+		return nil, err
+	}
+
+	prefix := rk[0 : len(rk)-len(key)]
 
 	// Create Iterator
 	iter := sv.nativeSnapshot.NewIter(sv.prefixIterOptions(prefix))
 
 	// Seek
-	iter.SeekGE(snapshotKey)
+	iter.SeekGE(rk)
 	offsetCounter := offset
 	for i := 0; i < count && iter.Valid(); {
 
@@ -109,12 +107,17 @@ func (sv *SnapshotView) Fetch(collection []byte, key []byte, offset uint64, coun
 func (sv *SnapshotView) Get(collection []byte, key []byte) ([]byte, error) {
 
 	// Prepare snapshot key
-	snapshotKey := bytes.Join([][]byte{
+	snapshotKey := genSnapshotKey(
 		collection,
 		key,
-	}, []byte("-"))
+	)
 
-	v, closer, err := sv.nativeSnapshot.Get(snapshotKey)
+	rk, err := sv.store.cfSnapshot.genRawKey(snapshotKey)
+	if err != nil {
+		return nil, err
+	}
+
+	v, closer, err := sv.nativeSnapshot.Get(rk)
 	if err != nil {
 		return nil, err
 	}

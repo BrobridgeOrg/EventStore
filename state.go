@@ -22,14 +22,9 @@ func (store *Store) genStateKey(class []byte, group []byte, prop []byte) []byte 
 
 }
 
-func (store *Store) putState(key []byte, value []byte) error {
+func (store *Store) putState(b *pebble.Batch, key []byte, value []byte) error {
 
-	cfHandle, err := store.GetColumnFamailyHandle("states")
-	if err != nil {
-		return err
-	}
-
-	err = cfHandle.Write(key, value)
+	err := store.cfState.Write(b, key, value)
 	if err != nil {
 		return err
 	}
@@ -39,12 +34,7 @@ func (store *Store) putState(key []byte, value []byte) error {
 
 func (store *Store) getState(key []byte) ([]byte, io.Closer, error) {
 
-	cfHandle, err := store.GetColumnFamailyHandle("states")
-	if err != nil {
-		return nil, nil, err
-	}
-
-	value, closer, err := cfHandle.Db.Get(key)
+	value, closer, err := store.cfState.Get(key)
 	if err != nil {
 		if err == pebble.ErrNotFound {
 			return nil, nil, ErrStateEntryNotFound
@@ -58,12 +48,7 @@ func (store *Store) getState(key []byte) ([]byte, io.Closer, error) {
 
 func (store *Store) deleteState(key []byte) error {
 
-	cfHandle, err := store.GetColumnFamailyHandle("states")
-	if err != nil {
-		return err
-	}
-
-	err = cfHandle.Delete(key)
+	err := store.cfState.Delete(key)
 	if err != nil {
 		return err
 	}
@@ -71,11 +56,11 @@ func (store *Store) deleteState(key []byte) error {
 	return nil
 }
 
-func (store *Store) SetStateBytes(class []byte, group []byte, key []byte, value []byte) error {
+func (store *Store) SetStateBytes(b *pebble.Batch, class []byte, group []byte, key []byte, value []byte) error {
 
 	k := store.genStateKey(class, group, key)
 
-	return store.putState(k, value)
+	return store.putState(b, k, value)
 }
 
 func (store *Store) GetStateBytes(class []byte, group []byte, key []byte) ([]byte, error) {
@@ -104,28 +89,24 @@ func (store *Store) DeleteState(class []byte, group []byte, key []byte) error {
 
 func (store *Store) ListStates(class []byte, group []byte, key []byte) (*Cursor, error) {
 
-	cfHandle, err := store.GetColumnFamailyHandle("states")
-	if err != nil {
-		return nil, err
-	}
-
-	prefix := append(bytes.Join([][]byte{
+	targetKey := append(bytes.Join([][]byte{
 		class,
 		group,
-	}, []byte(".")), []byte(".")...)
+		key,
+	}, []byte(".")))
 
-	return cfHandle.List(prefix, key, &ListOptions{
-		WithoutRawPrefix: false,
+	return store.cfState.List([]byte(""), targetKey, &ListOptions{
+		WithoutRawPrefix: true,
 	})
 }
 
-func (store *Store) SetStateInt64(class []byte, group []byte, key []byte, value int64) error {
+func (store *Store) SetStateInt64(b *pebble.Batch, class []byte, group []byte, key []byte, value int64) error {
 
 	k := store.genStateKey(class, group, key)
 
 	data := Int64ToBytes(value)
 
-	return store.putState(k, data)
+	return store.putState(b, k, data)
 }
 
 func (store *Store) GetStateInt64(class []byte, group []byte, key []byte) (int64, error) {
@@ -144,13 +125,13 @@ func (store *Store) GetStateInt64(class []byte, group []byte, key []byte) (int64
 	return data, nil
 }
 
-func (store *Store) SetStateUint64(class []byte, group []byte, key []byte, value uint64) error {
+func (store *Store) SetStateUint64(b *pebble.Batch, class []byte, group []byte, key []byte, value uint64) error {
 
 	k := store.genStateKey(class, group, key)
 
 	data := Uint64ToBytes(value)
 
-	return store.putState(k, data)
+	return store.putState(b, k, data)
 }
 
 func (store *Store) GetStateUint64(class []byte, group []byte, key []byte) (uint64, error) {
@@ -169,13 +150,13 @@ func (store *Store) GetStateUint64(class []byte, group []byte, key []byte) (uint
 	return data, nil
 }
 
-func (store *Store) SetStateFloat64(class []byte, group []byte, key []byte, value float64) error {
+func (store *Store) SetStateFloat64(b *pebble.Batch, class []byte, group []byte, key []byte, value float64) error {
 
 	k := store.genStateKey(class, group, key)
 
 	data := Float64ToBytes(value)
 
-	return store.putState(k, data)
+	return store.putState(b, k, data)
 }
 
 func (store *Store) GetStateFloat64(class []byte, group []byte, key []byte) (float64, error) {
@@ -194,13 +175,13 @@ func (store *Store) GetStateFloat64(class []byte, group []byte, key []byte) (flo
 	return data, nil
 }
 
-func (store *Store) SetStateString(class []byte, group []byte, key []byte, value string) error {
+func (store *Store) SetStateString(b *pebble.Batch, class []byte, group []byte, key []byte, value string) error {
 
 	k := store.genStateKey(class, group, key)
 
 	data := StrToBytes(value)
 
-	return store.putState(k, data)
+	return store.putState(b, k, data)
 }
 
 func (store *Store) GetStateString(class []byte, group []byte, key []byte) (string, error) {

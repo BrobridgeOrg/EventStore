@@ -9,7 +9,30 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestDelete(t *testing.T) {
+func TestStoreWrite(t *testing.T) {
+
+	createTestEventStore("testing", false)
+	defer closeTestEventStore()
+
+	store := createTestStore()
+	value := []byte("test_value")
+
+	seq, err := store.Write(value)
+	if err != nil {
+		t.Error(err)
+	}
+
+	assert.Equal(t, uint64(1), seq)
+
+	v, err := store.Get(seq)
+	if err != nil {
+		t.Error(err)
+	}
+
+	assert.Equal(t, value, v)
+}
+
+func TestStoreDelete(t *testing.T) {
 
 	createTestEventStore("testing", false)
 	defer closeTestEventStore()
@@ -20,39 +43,27 @@ func TestDelete(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-
 	if err := store.Delete(seq); err != nil {
 		t.Error(err)
 	}
 }
 
-func TestWrite(t *testing.T) {
+func TestStoreFetch(t *testing.T) {
 
 	createTestEventStore("testing", false)
 	defer closeTestEventStore()
 
 	store := createTestStore()
+	totalCount := 5000
 
-	if _, err := store.Write([]byte("Benchmark")); err != nil {
-		t.Error(err)
-	}
-}
-
-func TestFetch(t *testing.T) {
-
-	createTestEventStore("testing", false)
-	defer closeTestEventStore()
-
-	store := createTestStore()
-
-	for i := 0; i < 5000; i++ {
+	for i := 0; i < totalCount; i++ {
 		if _, err := store.Write([]byte(fmt.Sprintf("%d", i+1))); err != nil {
 			t.Error(err)
 		}
 	}
 
 	var lastSeq uint64 = 0
-	events, err := store.Fetch(0, 0, 5000)
+	events, err := store.Fetch(0, 0, totalCount)
 	if err != nil {
 		panic(err)
 	}
@@ -66,15 +77,17 @@ func TestFetch(t *testing.T) {
 	}
 }
 
-func TestRealtimeFetch(t *testing.T) {
+func TestStoreRealtimeFetch(t *testing.T) {
 
 	createTestEventStore("testing", false)
 	defer closeTestEventStore()
 
 	store := createTestStore()
 
+	totalCount := 10000
+
 	go func() {
-		for i := 0; i < 10000; i++ {
+		for i := 0; i < totalCount; i++ {
 			if _, err := store.Write([]byte(fmt.Sprintf("%d", i+1))); err != nil {
 				t.Error(err)
 			}
@@ -83,7 +96,7 @@ func TestRealtimeFetch(t *testing.T) {
 
 	var lastSeq uint64 = 0
 	var offset uint64 = 0
-	for i := uint64(0); i < 10000; {
+	for i := uint64(0); i < uint64(totalCount); {
 
 		if i != 0 {
 			offset = 1
@@ -106,7 +119,7 @@ func TestRealtimeFetch(t *testing.T) {
 	}
 }
 
-func TestFetchWithCount(t *testing.T) {
+func TestStoreFetchWithCount(t *testing.T) {
 
 	createTestEventStore("testing", false)
 	defer closeTestEventStore()
@@ -129,7 +142,7 @@ func TestFetchWithCount(t *testing.T) {
 	}
 }
 
-func TestFetchWithOffset(t *testing.T) {
+func TestStoreFetchWithOffset(t *testing.T) {
 
 	createTestEventStore("testing", false)
 	defer closeTestEventStore()
@@ -158,7 +171,7 @@ func TestFetchWithOffset(t *testing.T) {
 	}
 }
 
-func TestSubscription(t *testing.T) {
+func TestStoreSubscription(t *testing.T) {
 
 	createTestEventStore("testing", false)
 	defer closeTestEventStore()
@@ -169,7 +182,7 @@ func TestSubscription(t *testing.T) {
 
 	// Subscription to store
 	_, err := store.Subscribe(func(event *Event) {
-		//		t.Logf("%d %s", event.Sequence, string(event.Data))
+		//t.Logf("%d %s", event.Sequence, string(event.Data))
 		event.Ack()
 		wg.Done()
 	}, DurableName(store.name))
@@ -189,7 +202,7 @@ func TestSubscription(t *testing.T) {
 	wg.Wait()
 }
 
-func TestSubscriptionOffset(t *testing.T) {
+func TestStoreSubscriptionOffset(t *testing.T) {
 
 	createTestEventStore("testing", false)
 	defer closeTestEventStore()
@@ -272,7 +285,7 @@ func TestSubscriptionOffset(t *testing.T) {
 	}
 }
 
-func TestSubscriptionWithDurableName(t *testing.T) {
+func TestStoreSubscriptionWithDurableName(t *testing.T) {
 
 	createTestEventStore("testing", false)
 	defer closeTestEventStore()

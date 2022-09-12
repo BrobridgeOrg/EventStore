@@ -1,6 +1,8 @@
 package eventstore
 
-import "github.com/cockroachdb/pebble"
+import (
+	"github.com/cockroachdb/pebble"
+)
 
 type Cursor struct {
 	prefix []byte

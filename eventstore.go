@@ -3,6 +3,8 @@ package eventstore
 import (
 	"errors"
 	"os"
+
+	"github.com/cockroachdb/pebble"
 )
 
 var (
@@ -61,13 +63,13 @@ func (eventstore *EventStore) SetSnapshotHandler(fn func(*SnapshotRequest) error
 	eventstore.snapshot.SetHandler(fn)
 }
 
-func (eventstore *EventStore) GetStore(storeName string) (*Store, error) {
+func (eventstore *EventStore) GetStore(storeName string, opts ...StoreOpt) (*Store, error) {
 
 	if store, ok := eventstore.stores[storeName]; ok {
 		return store, nil
 	}
 
-	store, err := NewStore(eventstore, storeName)
+	store, err := NewStore(eventstore, storeName, opts...)
 	if err != nil {
 		return nil, err
 
@@ -78,13 +80,13 @@ func (eventstore *EventStore) GetStore(storeName string) (*Store, error) {
 	return store, nil
 }
 
-func (eventstore *EventStore) TakeSnapshot(store *Store, seq uint64, data []byte) error {
+func (eventstore *EventStore) TakeSnapshot(b *pebble.Batch, store *Store, seq uint64, data []byte) error {
 
 	if eventstore.snapshot == nil {
 		return nil
 	}
 
-	return eventstore.snapshot.Request(store, seq, data)
+	return eventstore.snapshot.Request(b, store, seq, data)
 }
 
 func (eventstore *EventStore) RecoverSnapshot(store *Store) error {

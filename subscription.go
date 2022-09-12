@@ -103,38 +103,39 @@ func (sub *Subscription) pull() {
 		return
 	}
 
-	iter := sub.cf.Db.NewIter(nil)
-	iter.SeekGE(Uint64ToBytes(sub.lastSequence))
+	cur, _ := sub.cf.List([]byte(""), Uint64ToBytes(sub.lastSequence), &ListOptions{
+		WithoutRawPrefix: true,
+	})
 
 	for !sub.isClosed {
 
-		if !iter.Valid() {
+		if cur.EOF() {
 			break
 		}
 
 		// Getting sequence number
-		key := iter.Key()
+		key := cur.GetKey()
 		seq := BytesToUint64(key)
 
 		// If we get record which is the same with last seq, find next one
 		if seq == sub.lastSequence {
 
 			// Get next one
-			iter.Next()
+			cur.Next()
 			continue
 		}
 
 		sub.lastSequence = seq
 
 		// Invoke data handler
-		value := iter.Value()
+		value := cur.GetData()
 		sub.handle(seq, value)
 
 		// Get next one
-		iter.Next()
+		cur.Next()
 	}
 
-	iter.Close()
+	cur.Close()
 }
 
 func (sub *Subscription) handle(seq uint64, data []byte) {
@@ -167,7 +168,7 @@ func (sub *Subscription) updateDurableOffset() {
 	for !sub.isClosed {
 
 		// Update offset for this durable name
-		err := sub.store.UpdateDurableState(sub.durableName, sub.lastSequence)
+		err := sub.store.UpdateDurableState(nil, sub.durableName, sub.lastSequence)
 		if err == nil {
 			return
 		}

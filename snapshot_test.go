@@ -211,7 +211,7 @@ func TestSnapshotDelete(t *testing.T) {
 
 		// Check if record exists
 		_, err = request.Get([]byte("testing"), []byte("testing_key"))
-		assert.Equal(t, err, ErrRecordNotFound)
+		assert.Equal(t, ErrRecordNotFound, err)
 
 		wg.Done()
 

@@ -18,7 +18,7 @@ func TestStateSetStateBytes(t *testing.T) {
 	key := []byte("mykey")
 	val := []byte("test_value")
 
-	if err := store.SetStateBytes(class, group, key, val); err != nil {
+	if err := store.SetStateBytes(nil, class, group, key, val); err != nil {
 		t.Error(err)
 		return
 	}
@@ -43,7 +43,7 @@ func TestStateSetStateInt64(t *testing.T) {
 	key := []byte("mykey")
 	val := int64(9999999)
 
-	if err := store.SetStateInt64(class, group, key, val); err != nil {
+	if err := store.SetStateInt64(nil, class, group, key, val); err != nil {
 		t.Error(err)
 		return
 	}
@@ -68,7 +68,7 @@ func TestStateSetStateUint64(t *testing.T) {
 	key := []byte("mykey")
 	val := uint64(9999999)
 
-	if err := store.SetStateUint64(class, group, key, val); err != nil {
+	if err := store.SetStateUint64(nil, class, group, key, val); err != nil {
 		t.Error(err)
 		return
 	}
@@ -93,7 +93,7 @@ func TestStateSetStateFloat64(t *testing.T) {
 	key := []byte("mykey")
 	val := float64(9999.999)
 
-	if err := store.SetStateFloat64(class, group, key, val); err != nil {
+	if err := store.SetStateFloat64(nil, class, group, key, val); err != nil {
 		t.Error(err)
 	}
 
@@ -117,7 +117,7 @@ func TestStateSetStateString(t *testing.T) {
 	key := []byte("mykey")
 	val := "test_value"
 
-	if err := store.SetStateString(class, group, key, val); err != nil {
+	if err := store.SetStateString(nil, class, group, key, val); err != nil {
 		t.Error(err)
 		return
 	}
@@ -142,7 +142,7 @@ func TestStateDeleteState(t *testing.T) {
 	key := []byte("mykey")
 	val := []byte("test_value")
 
-	if err := store.SetStateBytes(class, group, key, val); err != nil {
+	if err := store.SetStateBytes(nil, class, group, key, val); err != nil {
 		t.Error(err)
 	}
 
@@ -176,7 +176,7 @@ func TestStateListStates(t *testing.T) {
 	for i := 1; i <= 10; i++ {
 		key := Int64ToBytes(int64(i))
 
-		err := store.SetStateInt64(class, group, key, int64(i))
+		err := store.SetStateInt64(nil, class, group, key, int64(i))
 		if err != nil {
 			t.Error(err)
 			return
