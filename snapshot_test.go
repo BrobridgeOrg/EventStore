@@ -50,7 +50,8 @@ func TestSnapshotWrite(t *testing.T) {
 
 	wg.Wait()
 
-	assert.Equal(t, uint64(1), store.GetSnapshotLastSequence())
+	assert.Equal(t, uint64(1), store.State().SnapshotLastSeq())
+	assert.Equal(t, uint64(1), store.State().SnapshotCount())
 }
 
 func TestSnapshotUpdate(t *testing.T) {
@@ -111,6 +112,7 @@ func TestSnapshotUpdate(t *testing.T) {
 	}
 
 	assert.Equal(t, []byte{1, 1, 1, 1, 1, 1, 1, 1}, data)
+	assert.Equal(t, uint64(1), store.State().SnapshotCount())
 }
 
 func TestSnapshotUpdateReopen(t *testing.T) {
@@ -157,6 +159,8 @@ func TestSnapshotUpdateReopen(t *testing.T) {
 
 	wg.Wait()
 
+	assert.Equal(t, uint64(1), store.State().SnapshotCount())
+
 	// Release current store
 	storeName := store.name
 	store.Close()
@@ -180,6 +184,7 @@ func TestSnapshotUpdateReopen(t *testing.T) {
 	}
 
 	assert.Equal(t, []byte{1, 1, 1, 1, 1, 1, 1, 1}, data)
+	assert.Equal(t, uint64(1), store.State().SnapshotCount())
 }
 
 func TestSnapshotDelete(t *testing.T) {
@@ -225,6 +230,8 @@ func TestSnapshotDelete(t *testing.T) {
 	}
 
 	wg.Wait()
+
+	assert.Equal(t, uint64(0), store.State().SnapshotCount())
 }
 
 func TestSnapshotViewFetch(t *testing.T) {
@@ -275,6 +282,7 @@ func TestSnapshotViewFetch(t *testing.T) {
 	wg.Wait()
 
 	assert.Equal(t, uint64(totalCount), snapshotCounter)
+	assert.Equal(t, snapshotCounter, store.State().SnapshotCount())
 
 	// Release current store
 	storeName := store.name
@@ -285,6 +293,8 @@ func TestSnapshotViewFetch(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
+
+	assert.Equal(t, snapshotCounter, store.State().SnapshotCount())
 
 	// Create a new snapshot view
 	view := NewSnapshotView(store)
@@ -325,5 +335,5 @@ func TestSnapshotViewFetch(t *testing.T) {
 	}
 
 	assert.Equal(t, uint64(totalCount), targetKey)
-	assert.Equal(t, uint64(totalCount), store.GetSnapshotLastSequence())
+	assert.Equal(t, uint64(totalCount), store.State().SnapshotLastSeq())
 }

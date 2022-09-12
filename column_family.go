@@ -55,19 +55,18 @@ func (cf *ColumnFamily) Get(key []byte) ([]byte, io.Closer, error) {
 	return cf.Store.db.Get(rk)
 }
 
-func (cf *ColumnFamily) Delete(key []byte) error {
+func (cf *ColumnFamily) Delete(b *pebble.Batch, key []byte) error {
 
 	rk, err := cf.genRawKey(key)
 	if err != nil {
 		return err
 	}
 
-	err = cf.Store.db.Delete(rk, pebble.NoSync)
-	if err != nil {
-		return err
+	if b != nil {
+		return b.Delete(rk, pebble.NoSync)
 	}
 
-	return nil
+	return cf.Store.db.Delete(rk, pebble.NoSync)
 }
 
 func (cf *ColumnFamily) Write(b *pebble.Batch, key []byte, data []byte) error {
@@ -79,20 +78,10 @@ func (cf *ColumnFamily) Write(b *pebble.Batch, key []byte, data []byte) error {
 
 	// Batch
 	if b != nil {
-		err = b.Set(rk, data, pebble.NoSync)
-		if err != nil {
-			return err
-		}
-
-		return nil
+		return b.Set(rk, data, pebble.NoSync)
 	}
 
-	err = cf.Store.db.Set(rk, data, pebble.NoSync)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return cf.Store.db.Set(rk, data, pebble.NoSync)
 }
 
 func (cf *ColumnFamily) list(rawPrefix []byte, targetPrimaryKey []byte, opts *ListOptions) (*Cursor, error) {

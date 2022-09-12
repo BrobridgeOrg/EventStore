@@ -154,7 +154,7 @@ func TestStateDeleteState(t *testing.T) {
 
 	assert.Equal(t, val, value)
 
-	err = store.DeleteState(class, group, key)
+	err = store.DeleteState(nil, class, group, key)
 	if err != nil {
 		t.Error(err)
 		return

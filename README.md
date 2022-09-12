@@ -14,11 +14,14 @@ goos: darwin
 goarch: amd64
 pkg: github.com/BrobridgeOrg/EventStore
 cpu: Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
-BenchmarkWrite-16                  	  348991	      2885 ns/op
-BenchmarkEventThroughput-16        	  177333	      6030 ns/op
-BenchmarkSnapshotPerformance-16    	   82579	     15176 ns/op
+BenchmarkWrite
+BenchmarkWrite-16                  	  208004	      5060 ns/op
+BenchmarkEventThroughput
+BenchmarkEventThroughput-16        	  119781	      9529 ns/op
+BenchmarkSnapshotPerformance
+BenchmarkSnapshotPerformance-16    	   62036	     17749 ns/op
 PASS
-ok  	github.com/BrobridgeOrg/EventStore	31.418s
+ok  	github.com/BrobridgeOrg/EventStore	20.779s
 ```
 
 ## License

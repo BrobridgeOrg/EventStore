@@ -46,9 +46,9 @@ func (store *Store) getState(key []byte) ([]byte, io.Closer, error) {
 	return value, closer, nil
 }
 
-func (store *Store) deleteState(key []byte) error {
+func (store *Store) deleteState(b *pebble.Batch, key []byte) error {
 
-	err := store.cfState.Delete(key)
+	err := store.cfState.Delete(b, key)
 	if err != nil {
 		return err
 	}
@@ -80,11 +80,11 @@ func (store *Store) GetStateBytes(class []byte, group []byte, key []byte) ([]byt
 	return data, nil
 }
 
-func (store *Store) DeleteState(class []byte, group []byte, key []byte) error {
+func (store *Store) DeleteState(b *pebble.Batch, class []byte, group []byte, key []byte) error {
 
 	k := store.genStateKey(class, group, key)
 
-	return store.deleteState(k)
+	return store.deleteState(b, k)
 }
 
 func (store *Store) ListStates(class []byte, group []byte, key []byte) (*Cursor, error) {

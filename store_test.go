@@ -30,6 +30,63 @@ func TestStoreWrite(t *testing.T) {
 	}
 
 	assert.Equal(t, value, v)
+	assert.Equal(t, uint64(1), store.State().Count())
+	assert.Equal(t, seq, store.State().LastSeq())
+}
+
+func TestStoreWriteReopen(t *testing.T) {
+
+	createTestEventStore("testing", false)
+	defer closeTestEventStore()
+
+	store := createTestStore()
+	value := []byte("test_value")
+
+	assert.Equal(t, uint64(0), store.State().LastSeq())
+
+	seq, err := store.Write(value)
+	if err != nil {
+		t.Error(err)
+	}
+
+	assert.Equal(t, uint64(1), seq)
+	assert.Equal(t, seq, store.State().LastSeq())
+	assert.Equal(t, uint64(1), store.State().Count())
+
+	v, err := store.Get(seq)
+	if err != nil {
+		t.Error(err)
+	}
+
+	assert.Equal(t, value, v)
+
+	// Release current store and re-open store
+	storeName := store.name
+	store.Close()
+
+	store, err = testEventstore.GetStore(storeName)
+	if err != nil {
+		panic(err)
+	}
+
+	assert.Equal(t, seq, store.State().LastSeq())
+	assert.Equal(t, uint64(1), store.State().Count())
+
+	nseq, err := store.Write(value)
+	if err != nil {
+		t.Error(err)
+	}
+
+	assert.Equal(t, nseq, seq+1)
+	assert.Equal(t, nseq, store.State().LastSeq())
+	assert.Equal(t, uint64(2), store.State().Count())
+
+	v, err = store.Get(nseq)
+	if err != nil {
+		t.Error(err)
+	}
+
+	assert.Equal(t, value, v)
 }
 
 func TestStoreDelete(t *testing.T) {
@@ -46,6 +103,9 @@ func TestStoreDelete(t *testing.T) {
 	if err := store.Delete(seq); err != nil {
 		t.Error(err)
 	}
+
+	assert.Equal(t, seq, store.State().LastSeq())
+	assert.Equal(t, uint64(0), store.State().Count())
 }
 
 func TestStoreFetch(t *testing.T) {
@@ -61,6 +121,9 @@ func TestStoreFetch(t *testing.T) {
 			t.Error(err)
 		}
 	}
+
+	assert.Equal(t, uint64(totalCount), store.State().Count())
+	assert.Equal(t, uint64(totalCount), store.State().LastSeq())
 
 	var lastSeq uint64 = 0
 	events, err := store.Fetch(0, 0, totalCount)
@@ -117,6 +180,8 @@ func TestStoreRealtimeFetch(t *testing.T) {
 
 		i += uint64(len(events))
 	}
+
+	assert.Equal(t, uint64(totalCount), store.State().Count())
 }
 
 func TestStoreFetchWithCount(t *testing.T) {
@@ -131,6 +196,9 @@ func TestStoreFetchWithCount(t *testing.T) {
 			t.Error(err)
 		}
 	}
+
+	assert.Equal(t, uint64(10), store.State().Count())
+	assert.Equal(t, uint64(10), store.State().LastSeq())
 
 	events, err := store.Fetch(0, 1, 2)
 	if err != nil {
@@ -322,6 +390,8 @@ func TestStoreSubscriptionWithDurableName(t *testing.T) {
 	wg.Wait()
 
 	assert.Equal(t, lastSeq, uint64(msgCount-30))
+	assert.Equal(t, lastSeq, store.State().LastSeq())
+	assert.Equal(t, lastSeq, store.State().Count())
 
 	// Close current subscription
 	sub.Close()
@@ -332,6 +402,7 @@ func TestStoreSubscriptionWithDurableName(t *testing.T) {
 	}
 
 	assert.Equal(t, lastSeq, durableSeq)
+	assert.Equal(t, durableSeq, store.State().LastSeq())
 
 	// Write more messages
 	wg.Add(30)

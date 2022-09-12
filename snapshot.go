@@ -2,6 +2,7 @@ package eventstore
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/cockroachdb/pebble"
 )
@@ -54,9 +55,20 @@ func (request *SnapshotRequest) Upsert(collection []byte, key []byte, value []by
 		key,
 	)
 
+	b := request.Store.batchPool.Get().(*pebble.Batch)
+	defer request.Store.batchPool.Put(b)
+	b.Reset()
+
 	oldValue, closer, err := request.Store.cfSnapshot.Get(snapshotKey)
 	if err != nil {
 		if err != pebble.ErrNotFound {
+			return err
+		}
+
+		// New record, it should update snapshot states
+		request.Store.state.snapshotCount.Increase(1)
+		err = request.Store.state.syncSnapshotCount(request.Store, b)
+		if err != nil {
 			return err
 		}
 	}
@@ -65,15 +77,18 @@ func (request *SnapshotRequest) Upsert(collection []byte, key []byte, value []by
 		defer closer.Close()
 	}
 
-	//fmt.Println(oldValue, value)
-
-	err = request.Store.cfSnapshot.Write(nil, snapshotKey, fn(oldValue, value))
+	err = request.Store.cfSnapshot.Write(b, snapshotKey, fn(oldValue, value))
 	if err != nil {
 		return err
 	}
 
 	// Update snapshot state
-	err = request.updateDurableState(nil, collection)
+	err = request.updateDurableState(b, collection)
+	if err != nil {
+		return err
+	}
+
+	err = b.Commit(pebble.NoSync)
 	if err != nil {
 		return err
 	}
@@ -86,7 +101,7 @@ func (request *SnapshotRequest) Upsert(collection []byte, key []byte, value []by
 func (request *SnapshotRequest) updateDurableState(b *pebble.Batch, collection []byte) error {
 
 	// Update snapshot state
-	return request.Store.SetStateUint64(b, []byte("snapshot"), collection, []byte("lastseq"), request.Sequence)
+	return request.Store.SetStateUint64(b, []byte("snapshot"), collection, []byte("lastSeq"), request.Sequence)
 }
 
 func (request *SnapshotRequest) UpdateDurableState(b *pebble.Batch, collection []byte) error {
@@ -100,7 +115,23 @@ func (request *SnapshotRequest) Delete(collection []byte, key []byte) error {
 		key,
 	)
 
-	err := request.Store.cfSnapshot.Delete(snapshotKey)
+	b := request.Store.batchPool.Get().(*pebble.Batch)
+	defer request.Store.batchPool.Put(b)
+	b.Reset()
+
+	err := request.Store.cfSnapshot.Delete(b, snapshotKey)
+	if err != nil {
+		return err
+	}
+
+	// Update snapshot states
+	atomic.AddUint64((*uint64)(&request.Store.state.snapshotCount), ^uint64(0))
+	err = request.Store.state.syncSnapshotCount(request.Store, b)
+	if err != nil {
+		return err
+	}
+
+	err = b.Commit(pebble.NoSync)
 	if err != nil {
 		return err
 	}

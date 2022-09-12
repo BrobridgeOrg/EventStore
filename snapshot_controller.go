@@ -86,15 +86,9 @@ func (ss *SnapshotController) handle(req *SnapshotRequest) error {
 
 func (ss *SnapshotController) updateSnapshotState(req *SnapshotRequest) error {
 
-	err := req.Store.SetStateUint64(req.Batch, []byte("event"), []byte("snapshot"), []byte("lastseq"), req.Sequence)
-	if err != nil {
-		return err
-	}
-
 	// Update store property
-	atomic.StoreUint64((*uint64)(&req.Store.snapshotLastSeq), req.Sequence)
-
-	return nil
+	atomic.StoreUint64((*uint64)(&req.Store.state.snapshotLastSeq), req.Sequence)
+	return req.Store.state.syncSnapshotLastSeq(req.Store, req.Batch)
 }
 
 func (ss *SnapshotController) SetHandler(fn func(*SnapshotRequest) error) {
@@ -118,13 +112,12 @@ func (ss *SnapshotController) Request(b *pebble.Batch, store *Store, seq uint64,
 func (ss *SnapshotController) RecoverSnapshot(store *Store) error {
 
 	// Loading last sequence of snapshot
-	lastSeq, err := store.GetStateUint64([]byte("event"), []byte("snapshot"), []byte("lastseq"))
-	if err != nil && err != ErrStateEntryNotFound {
-		return err
-	}
+	lastSeq := store.state.SnapshotLastSeq()
 
-	// Update store property
-	atomic.StoreUint64((*uint64)(&store.snapshotLastSeq), lastSeq)
+	// No need to recover snapshot
+	if lastSeq >= store.state.LastSeq() {
+		return nil
+	}
 
 	key := Uint64ToBytes(lastSeq)
 

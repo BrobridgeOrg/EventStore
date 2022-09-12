@@ -21,10 +21,114 @@ var (
 	PrefixSnapshotData = []byte("d")
 )
 
+type StoreState struct {
+	count           Counter
+	lastSeq         Counter
+	snapshotCount   Counter
+	snapshotLastSeq uint64
+}
+
+func (ss *StoreState) Count() uint64 {
+	return ss.count.Count()
+}
+
+func (ss *StoreState) LastSeq() uint64 {
+	return ss.lastSeq.Count()
+}
+
+func (ss *StoreState) SnapshotCount() uint64 {
+	return ss.snapshotCount.Count()
+}
+
+func (ss *StoreState) SnapshotLastSeq() uint64 {
+	return ss.snapshotLastSeq
+}
+
+func (ss *StoreState) loadSnapshotCount(s *Store) error {
+
+	sc, err := s.GetStateUint64([]byte("store"), []byte("snapshot"), []byte("count"))
+	if err != nil {
+		if err != ErrStateEntryNotFound {
+			return err
+		}
+
+		sc = 0
+	}
+
+	ss.snapshotCount.SetCount(sc)
+
+	return nil
+}
+
+func (ss *StoreState) loadSnapshotLastSeq(s *Store) error {
+
+	lseq, err := s.GetStateUint64([]byte("store"), []byte("snapshot"), []byte("lastSeq"))
+	if err != nil {
+		if err != ErrStateEntryNotFound {
+			return err
+		}
+
+		lseq = 0
+
+	}
+
+	ss.snapshotLastSeq = lseq
+
+	return nil
+}
+
+func (ss *StoreState) loadLastSeq(s *Store) error {
+
+	els, err := s.GetStateUint64([]byte("store"), []byte("event"), []byte("lastSeq"))
+	if err != nil {
+		if err != ErrStateEntryNotFound {
+			return err
+		}
+
+		els = 0
+	}
+
+	ss.lastSeq.SetCount(els)
+
+	return nil
+}
+
+func (ss *StoreState) loadCount(s *Store) error {
+
+	ec, err := s.GetStateUint64([]byte("store"), []byte("event"), []byte("count"))
+	if err != nil {
+		if err != ErrStateEntryNotFound {
+			return err
+		}
+
+		ec = 0
+	}
+
+	ss.count.SetCount(ec)
+
+	return nil
+}
+
+func (ss *StoreState) syncSnapshotCount(s *Store, b *pebble.Batch) error {
+	return s.SetStateUint64(b, []byte("store"), []byte("snapshot"), []byte("count"), ss.snapshotCount.Count())
+}
+
+func (ss *StoreState) syncSnapshotLastSeq(s *Store, b *pebble.Batch) error {
+	return s.SetStateUint64(b, []byte("store"), []byte("snapshot"), []byte("lastSeq"), ss.snapshotLastSeq)
+}
+
+func (ss *StoreState) syncLastSeq(s *Store, b *pebble.Batch) error {
+	return s.SetStateUint64(b, []byte("store"), []byte("event"), []byte("lastSeq"), ss.lastSeq.Count())
+}
+
+func (ss *StoreState) syncCount(s *Store, b *pebble.Batch) error {
+	return s.SetStateUint64(b, []byte("store"), []byte("event"), []byte("count"), ss.count.Count())
+}
+
 type StoreOpt func(s *Store)
 
 type Store struct {
-	counter    Counter
+	state      *StoreState
 	eventstore *EventStore
 	options    *Options
 	name       string
@@ -53,6 +157,7 @@ type Store struct {
 func NewStore(eventstore *EventStore, storeName string, opts ...StoreOpt) (*Store, error) {
 
 	store := &Store{
+		state:           &StoreState{},
 		eventstore:      eventstore,
 		options:         eventstore.options,
 		name:            storeName,
@@ -72,12 +177,6 @@ func NewStore(eventstore *EventStore, storeName string, opts ...StoreOpt) (*Stor
 
 	err := store.openDatabase()
 	if err != nil {
-		return nil, err
-	}
-
-	err = store.initializeCounter()
-	if err != nil {
-		store.Close()
 		return nil, err
 	}
 
@@ -163,6 +262,37 @@ func (store *Store) openDatabase() error {
 	store.cfEvent = NewColumnFamily(store, "event", PrefixEvent)
 	store.cfSnapshot = NewColumnFamily(store, "snapshot", PrefixSnapshotData)
 
+	// Loading states
+	err = store.loadStates()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (store *Store) loadStates() error {
+
+	err := store.state.loadLastSeq(store)
+	if err != nil {
+		return err
+	}
+
+	err = store.state.loadCount(store)
+	if err != nil {
+		return err
+	}
+
+	err = store.state.loadSnapshotCount(store)
+	if err != nil {
+		return err
+	}
+
+	err = store.state.loadSnapshotLastSeq(store)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -224,41 +354,12 @@ func (store *Store) Close() {
 	store.cfSnapshot = nil
 }
 
-func (store *Store) initializeCounter() error {
-
-	// Getting last sequence from state store
-	lastSeq, err := store.GetStateUint64([]byte("store"), []byte("event"), []byte("lastseq"))
-	if err != nil {
-		if err == ErrStateEntryNotFound {
-			store.counter = Counter(1)
-			return nil
-		}
-
-		return err
-	}
-
-	store.counter = Counter(lastSeq + 1)
-
-	return nil
-}
-
-func (store *Store) updateLastSeq(b *pebble.Batch, seq uint64) error {
-
-	err := store.SetStateUint64(b, []byte("store"), []byte("event"), []byte("lastseq"), seq)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (store *Store) createNewSeq() uint64 {
+	return store.state.lastSeq.Increase(1)
+}
 
-	// Getting sequence
-	seq := store.counter.Count()
-	store.counter.Increase(1)
-
-	return seq
+func (store *Store) State() *StoreState {
+	return store.state
 }
 
 func (store *Store) Get(seq uint64) ([]byte, error) {
@@ -285,8 +386,25 @@ func (store *Store) Delete(seq uint64) error {
 	// Preparing key-value
 	key := Uint64ToBytes(seq)
 
+	b := store.batchPool.Get().(*pebble.Batch)
+	defer store.batchPool.Put(b)
+	b.Reset()
+
 	// Write
-	err := store.cfEvent.Delete(key)
+	err := store.cfEvent.Delete(b, key)
+	if err != nil {
+		return err
+	}
+
+	store.state.count.Increase(^uint64(0))
+
+	// Update state to persistent store
+	err = store.state.syncCount(store, b)
+	if err != nil {
+		return err
+	}
+
+	err = b.Commit(pebble.NoSync)
 	if err != nil {
 		return err
 	}
@@ -304,8 +422,8 @@ func (store *Store) Write(data []byte) (uint64, error) {
 	// Preparing key-value
 	key := Uint64ToBytes(seq)
 
-	//b := store.db.NewBatch()
 	b := store.batchPool.Get().(*pebble.Batch)
+	defer store.batchPool.Put(b)
 	b.Reset()
 
 	// Write
@@ -314,8 +432,15 @@ func (store *Store) Write(data []byte) (uint64, error) {
 		return 0, err
 	}
 
-	// update seq
-	err = store.updateLastSeq(b, seq)
+	// sync seq to persistent store
+	err = store.state.syncLastSeq(store, b)
+	if err != nil {
+		return 0, err
+	}
+
+	// update events count to persistent store
+	store.state.count.Increase(1)
+	err = store.state.syncCount(store, b)
 	if err != nil {
 		return 0, err
 	}
@@ -324,8 +449,6 @@ func (store *Store) Write(data []byte) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-
-	store.batchPool.Put(b)
 
 	// Take snapshot
 	store.eventstore.TakeSnapshot(nil, store, seq, data)
@@ -348,20 +471,12 @@ func (store *Store) DispatchEvent() {
 	})
 }
 
-func (store *Store) GetSnapshotLastSequence() uint64 {
-	return atomic.LoadUint64((*uint64)(&store.snapshotLastSeq))
-}
-
-func (store *Store) GetLastSequence() uint64 {
-	return store.counter.Count() - 1
-}
-
 func (store *Store) GetDurableState(durableName string) (uint64, error) {
-	return store.GetStateUint64([]byte("durable"), StrToBytes(durableName), []byte("lastseq"))
+	return store.GetStateUint64([]byte("durable"), StrToBytes(durableName), []byte("lastSeq"))
 }
 
 func (store *Store) UpdateDurableState(b *pebble.Batch, durableName string, lastSeq uint64) error {
-	return store.SetStateUint64(b, []byte("durable"), StrToBytes(durableName), []byte("lastseq"), lastSeq)
+	return store.SetStateUint64(b, []byte("durable"), StrToBytes(durableName), []byte("lastSeq"), lastSeq)
 }
 
 func (store *Store) registerSubscription(sub *Subscription) error {
@@ -402,7 +517,8 @@ func (store *Store) Fetch(startAt uint64, offset uint64, count int) ([]*Event, e
 
 	events := make([]*Event, 0, count)
 
-	if startAt+offset >= store.counter.Count() {
+	//if startAt+offset >= store.counter.Count() {
+	if startAt+offset > store.state.LastSeq() {
 		return events, nil
 	}
 
