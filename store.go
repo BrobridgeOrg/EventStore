@@ -30,7 +30,6 @@ type Store struct {
 	name       string
 	dbPath     string
 	db         *pebble.DB
-	batch      *pebble.Batch
 
 	// column families
 	cfState    *ColumnFamily
@@ -146,7 +145,6 @@ func (store *Store) openDatabase() error {
 	}
 
 	store.db = db
-	store.batch = db.NewBatch()
 
 	// Initializing scheduler
 	store.timer = time.NewTimer(store.maxSyncInterval)
