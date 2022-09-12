@@ -320,7 +320,11 @@ func (store *Store) Write(data []byte) (uint64, error) {
 		return 0, err
 	}
 
-	b.Commit(pebble.NoSync)
+	err = b.Commit(pebble.NoSync)
+	if err != nil {
+		return 0, err
+	}
+
 	store.batchPool.Put(b)
 
 	// Take snapshot
