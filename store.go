@@ -30,6 +30,7 @@ type Store struct {
 	name       string
 	dbPath     string
 	db         *pebble.DB
+	batchPool  sync.Pool
 
 	// column families
 	cfState    *ColumnFamily
@@ -145,6 +146,11 @@ func (store *Store) openDatabase() error {
 	}
 
 	store.db = db
+	store.batchPool = sync.Pool{
+		New: func() interface{} {
+			return store.db.NewBatch()
+		},
+	}
 
 	// Initializing scheduler
 	store.timer = time.NewTimer(store.maxSyncInterval)
@@ -298,7 +304,9 @@ func (store *Store) Write(data []byte) (uint64, error) {
 	// Preparing key-value
 	key := Uint64ToBytes(seq)
 
-	b := store.db.NewBatch()
+	//b := store.db.NewBatch()
+	b := store.batchPool.Get().(*pebble.Batch)
+	b.Reset()
 
 	// Write
 	err := store.cfEvent.Write(b, key, data)
@@ -313,6 +321,7 @@ func (store *Store) Write(data []byte) (uint64, error) {
 	}
 
 	b.Commit(pebble.NoSync)
+	store.batchPool.Put(b)
 
 	// Take snapshot
 	store.eventstore.TakeSnapshot(nil, store, seq, data)
