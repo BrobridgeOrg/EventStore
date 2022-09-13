@@ -86,12 +86,20 @@ func (eventstore *EventStore) TakeSnapshot(b *pebble.Batch, store *Store, seq ui
 		return nil
 	}
 
+	if !store.enabledSnapshot {
+		return nil
+	}
+
 	return eventstore.snapshot.Request(b, store, seq, data)
 }
 
 func (eventstore *EventStore) RecoverSnapshot(store *Store) error {
 
 	if eventstore.snapshot == nil {
+		return nil
+	}
+
+	if !store.enabledSnapshot {
 		return nil
 	}
 

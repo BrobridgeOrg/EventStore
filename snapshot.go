@@ -31,7 +31,7 @@ func (request *SnapshotRequest) Get(collection []byte, key []byte) ([]byte, erro
 		key,
 	)
 
-	value, closer, err := request.Store.cfSnapshot.Get(snapshotKey)
+	value, closer, err := request.Store.cfSnapshot.Get(request.Batch, snapshotKey)
 	if err != nil {
 		if err == pebble.ErrNotFound {
 			return nil, ErrRecordNotFound
@@ -55,11 +55,7 @@ func (request *SnapshotRequest) Upsert(collection []byte, key []byte, value []by
 		key,
 	)
 
-	b := request.Store.batchPool.Get().(*pebble.Batch)
-	defer request.Store.batchPool.Put(b)
-	b.Reset()
-
-	oldValue, closer, err := request.Store.cfSnapshot.Get(snapshotKey)
+	oldValue, closer, err := request.Store.cfSnapshot.Get(request.Batch, snapshotKey)
 	if err != nil {
 		if err != pebble.ErrNotFound {
 			return err
@@ -67,7 +63,7 @@ func (request *SnapshotRequest) Upsert(collection []byte, key []byte, value []by
 
 		// New record, it should update snapshot states
 		request.Store.state.snapshotCount.Increase(1)
-		err = request.Store.state.syncSnapshotCount(request.Store, b)
+		err = request.Store.state.syncSnapshotCount(request.Store, request.Batch)
 		if err != nil {
 			return err
 		}
@@ -77,23 +73,16 @@ func (request *SnapshotRequest) Upsert(collection []byte, key []byte, value []by
 		defer closer.Close()
 	}
 
-	err = request.Store.cfSnapshot.Write(b, snapshotKey, fn(oldValue, value))
+	err = request.Store.cfSnapshot.Write(request.Batch, snapshotKey, fn(oldValue, value))
 	if err != nil {
 		return err
 	}
 
 	// Update snapshot state
-	err = request.updateDurableState(b, collection)
+	err = request.updateDurableState(request.Batch, collection)
 	if err != nil {
 		return err
 	}
-
-	err = b.Commit(pebble.NoSync)
-	if err != nil {
-		return err
-	}
-
-	request.Store.requestSync()
 
 	return nil
 }
@@ -115,28 +104,17 @@ func (request *SnapshotRequest) Delete(collection []byte, key []byte) error {
 		key,
 	)
 
-	b := request.Store.batchPool.Get().(*pebble.Batch)
-	defer request.Store.batchPool.Put(b)
-	b.Reset()
-
-	err := request.Store.cfSnapshot.Delete(b, snapshotKey)
+	err := request.Store.cfSnapshot.Delete(request.Batch, snapshotKey)
 	if err != nil {
 		return err
 	}
 
 	// Update snapshot states
 	atomic.AddUint64((*uint64)(&request.Store.state.snapshotCount), ^uint64(0))
-	err = request.Store.state.syncSnapshotCount(request.Store, b)
+	err = request.Store.state.syncSnapshotCount(request.Store, request.Batch)
 	if err != nil {
 		return err
 	}
-
-	err = b.Commit(pebble.NoSync)
-	if err != nil {
-		return err
-	}
-
-	request.Store.requestSync()
 
 	return nil
 }

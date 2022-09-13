@@ -32,13 +32,13 @@ func closeTestEventStore() {
 	testEventstore.Close()
 }
 
-func createTestStore() *Store {
+func createTestStore(opts ...StoreOpt) *Store {
 
 	counter := atomic.AddInt32(&testCounter, 1)
 	name := "bench-" + fmt.Sprintf("%d", counter)
 
 	// Create a new store for benchmark
-	store, err := testEventstore.GetStore(name)
+	store, err := testEventstore.GetStore(name, opts...)
 	if err != nil {
 		panic(err)
 	}

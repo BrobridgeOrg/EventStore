@@ -45,11 +45,15 @@ func (cf *ColumnFamily) genRawKey(key []byte) ([]byte, error) {
 	return append(cf.Prefix, key...), nil
 }
 
-func (cf *ColumnFamily) Get(key []byte) ([]byte, io.Closer, error) {
+func (cf *ColumnFamily) Get(b *pebble.Batch, key []byte) ([]byte, io.Closer, error) {
 
 	rk, err := cf.genRawKey(key)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	if b != nil {
+		return b.Get(rk)
 	}
 
 	return cf.Store.db.Get(rk)

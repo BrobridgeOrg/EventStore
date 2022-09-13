@@ -34,7 +34,7 @@ func (store *Store) putState(b *pebble.Batch, key []byte, value []byte) error {
 
 func (store *Store) getState(key []byte) ([]byte, io.Closer, error) {
 
-	value, closer, err := store.cfState.Get(key)
+	value, closer, err := store.cfState.Get(nil, key)
 	if err != nil {
 		if err == pebble.ErrNotFound {
 			return nil, nil, ErrStateEntryNotFound

@@ -57,6 +57,10 @@ func (ss *SnapshotController) initialize() error {
 
 func (ss *SnapshotController) handleRequest(req *SnapshotRequest) error {
 
+	b := req.Store.db.NewIndexedBatch()
+
+	req.Batch = b
+
 	err := ss.handle(req)
 	if err != nil {
 		fmt.Println(err)
@@ -69,6 +73,13 @@ func (ss *SnapshotController) handleRequest(req *SnapshotRequest) error {
 		fmt.Println(err)
 		return err
 	}
+
+	err = b.Commit(pebble.NoSync)
+	if err != nil {
+		return err
+	}
+
+	req.Store.requestSync()
 
 	return nil
 }
@@ -102,7 +113,7 @@ func (ss *SnapshotController) Request(b *pebble.Batch, store *Store, seq uint64,
 	req.Store = store
 	req.Sequence = seq
 	req.Data = data
-	req.Batch = b
+	req.Batch = nil
 
 	ss.shard.PushKV(store.name, req)
 
@@ -144,6 +155,7 @@ func (ss *SnapshotController) RecoverSnapshot(store *Store) error {
 		req.Store = store
 		req.Sequence = seq
 		req.Data = data
+		req.Batch = nil
 
 		// process
 		err := ss.handleRequest(req)

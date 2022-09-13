@@ -368,7 +368,7 @@ func (store *Store) Get(seq uint64) ([]byte, error) {
 	key := Uint64ToBytes(seq)
 
 	// Write
-	value, closer, err := store.cfEvent.Get(key)
+	value, closer, err := store.cfEvent.Get(nil, key)
 	if err != nil {
 		return nil, err
 	}
