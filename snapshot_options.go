@@ -7,7 +7,7 @@ type SnapshotOptions struct {
 
 func NewSnapshotOptions() *SnapshotOptions {
 	return &SnapshotOptions{
-		WorkerCount: 8,
+		WorkerCount: 4,
 		BufferSize:  102400,
 	}
 }

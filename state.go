@@ -56,6 +56,10 @@ func (store *Store) deleteState(b *pebble.Batch, key []byte) error {
 	return nil
 }
 
+func (store *Store) SetStateBytesByPath(b *pebble.Batch, key []byte, value []byte) error {
+	return store.putState(b, key, value)
+}
+
 func (store *Store) SetStateBytes(b *pebble.Batch, class []byte, group []byte, key []byte, value []byte) error {
 
 	k := store.genStateKey(class, group, key)
@@ -123,6 +127,11 @@ func (store *Store) GetStateInt64(class []byte, group []byte, key []byte) (int64
 	closer.Close()
 
 	return data, nil
+}
+
+func (store *Store) SetStateUint64ByPath(b *pebble.Batch, key []byte, value uint64) error {
+	data := Uint64ToBytes(value)
+	return store.putState(b, key, data)
 }
 
 func (store *Store) SetStateUint64(b *pebble.Batch, class []byte, group []byte, key []byte, value uint64) error {

@@ -1,6 +1,7 @@
 package eventstore
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -19,6 +20,19 @@ var (
 	PrefixState        = []byte("s")
 	PrefixEvent        = []byte("e")
 	PrefixSnapshotData = []byte("d")
+)
+
+var (
+	StateClassStore    = []byte("s")
+	StateGroupEvent    = []byte("e")
+	StateGroupSnapshot = []byte("s")
+)
+
+var (
+	StatePathEventLastSeq    = bytes.Join([][]byte{StateClassStore, StateGroupEvent, []byte("lastSeq")}, []byte("."))
+	StatePathEventCount      = bytes.Join([][]byte{StateClassStore, StateGroupEvent, []byte("count")}, []byte("."))
+	StatePathSnapshotLastSeq = bytes.Join([][]byte{StateClassStore, StateGroupSnapshot, []byte("lastSeq")}, []byte("."))
+	StatePathSnapshotCount   = bytes.Join([][]byte{StateClassStore, StateGroupSnapshot, []byte("count")}, []byte("."))
 )
 
 type StoreState struct {
@@ -46,7 +60,7 @@ func (ss *StoreState) SnapshotLastSeq() uint64 {
 
 func (ss *StoreState) loadSnapshotCount(s *Store) error {
 
-	sc, err := s.GetStateUint64([]byte("store"), []byte("snapshot"), []byte("count"))
+	sc, err := s.GetStateUint64(StateClassStore, StateGroupSnapshot, []byte("count"))
 	if err != nil {
 		if err != ErrStateEntryNotFound {
 			return err
@@ -62,7 +76,7 @@ func (ss *StoreState) loadSnapshotCount(s *Store) error {
 
 func (ss *StoreState) loadSnapshotLastSeq(s *Store) error {
 
-	lseq, err := s.GetStateUint64([]byte("store"), []byte("snapshot"), []byte("lastSeq"))
+	lseq, err := s.GetStateUint64(StateClassStore, StateGroupSnapshot, []byte("lastSeq"))
 	if err != nil {
 		if err != ErrStateEntryNotFound {
 			return err
@@ -79,7 +93,7 @@ func (ss *StoreState) loadSnapshotLastSeq(s *Store) error {
 
 func (ss *StoreState) loadLastSeq(s *Store) error {
 
-	els, err := s.GetStateUint64([]byte("store"), []byte("event"), []byte("lastSeq"))
+	els, err := s.GetStateUint64(StateClassStore, StateGroupEvent, []byte("lastSeq"))
 	if err != nil {
 		if err != ErrStateEntryNotFound {
 			return err
@@ -95,7 +109,7 @@ func (ss *StoreState) loadLastSeq(s *Store) error {
 
 func (ss *StoreState) loadCount(s *Store) error {
 
-	ec, err := s.GetStateUint64([]byte("store"), []byte("event"), []byte("count"))
+	ec, err := s.GetStateUint64(StateClassStore, StateGroupEvent, []byte("count"))
 	if err != nil {
 		if err != ErrStateEntryNotFound {
 			return err
@@ -110,19 +124,19 @@ func (ss *StoreState) loadCount(s *Store) error {
 }
 
 func (ss *StoreState) syncSnapshotCount(s *Store, b *pebble.Batch) error {
-	return s.SetStateUint64(b, []byte("store"), []byte("snapshot"), []byte("count"), ss.snapshotCount.Count())
+	return s.SetStateUint64ByPath(b, StatePathSnapshotCount, ss.snapshotCount.Count())
 }
 
 func (ss *StoreState) syncSnapshotLastSeq(s *Store, b *pebble.Batch) error {
-	return s.SetStateUint64(b, []byte("store"), []byte("snapshot"), []byte("lastSeq"), ss.snapshotLastSeq)
+	return s.SetStateUint64ByPath(b, StatePathSnapshotLastSeq, ss.snapshotLastSeq)
 }
 
 func (ss *StoreState) syncLastSeq(s *Store, b *pebble.Batch) error {
-	return s.SetStateUint64(b, []byte("store"), []byte("event"), []byte("lastSeq"), ss.lastSeq.Count())
+	return s.SetStateUint64ByPath(b, StatePathEventLastSeq, ss.lastSeq.Count())
 }
 
 func (ss *StoreState) syncCount(s *Store, b *pebble.Batch) error {
-	return s.SetStateUint64(b, []byte("store"), []byte("event"), []byte("count"), ss.count.Count())
+	return s.SetStateUint64ByPath(b, StatePathEventCount, ss.count.Count())
 }
 
 type StoreOpt func(s *Store)
