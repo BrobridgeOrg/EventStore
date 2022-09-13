@@ -118,21 +118,3 @@ func (request *SnapshotRequest) Delete(collection []byte, key []byte) error {
 
 	return nil
 }
-
-func (request *SnapshotRequest) write(collection []byte, key []byte, data []byte) error {
-
-	err := request.Store.cfSnapshot.Write(nil, key, data)
-	if err != nil {
-		return err
-	}
-
-	// Update snapshot state
-	err = request.updateDurableState(nil, collection)
-	if err != nil {
-		return err
-	}
-
-	request.Store.requestSync()
-
-	return nil
-}
