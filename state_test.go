@@ -32,6 +32,37 @@ func TestStateSetStateBytes(t *testing.T) {
 	assert.Equal(t, val, value)
 }
 
+func TestStateSetStateBytesByPath(t *testing.T) {
+
+	createTestEventStore("testing", false)
+	defer closeTestEventStore()
+
+	store := createTestStore()
+	class := []byte("mystate")
+	group := []byte("mygroup")
+	key := []byte("mykey")
+	val := []byte("test_value")
+
+	p := bytes.Join([][]byte{
+		class,
+		group,
+		key,
+	}, []byte("."))
+
+	if err := store.SetStateBytesByPath(nil, p, val); err != nil {
+		t.Error(err)
+		return
+	}
+
+	value, err := store.GetStateBytes(class, group, key)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	assert.Equal(t, val, value)
+}
+
 func TestStateSetStateInt64(t *testing.T) {
 
 	createTestEventStore("testing", false)
