@@ -15,7 +15,7 @@ func BenchmarkWrite(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		if _, err := store.Write([]byte("Benchmark")); err != nil {
+		if _, err := store.Write([]byte("Benchmark"), 0); err != nil {
 			panic(err)
 		}
 	}
@@ -42,7 +42,7 @@ func BenchmarkEventThroughput(b *testing.B) {
 	wg.Add(b.N)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, err := store.Write([]byte("Benchmark")); err != nil {
+		if _, err := store.Write([]byte("Benchmark"), 0); err != nil {
 			panic(err)
 		}
 	}
@@ -82,7 +82,7 @@ func BenchmarkSnapshotPerformance(b *testing.B) {
 
 	go func() {
 		for i := 0; i < b.N; i++ {
-			if _, err := store.Write([]byte("Benchmark")); err != nil {
+			if _, err := store.Write([]byte("Benchmark"), 0); err != nil {
 				panic(err)
 			}
 		}

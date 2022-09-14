@@ -44,7 +44,7 @@ func TestSnapshotWrite(t *testing.T) {
 
 	// Write data to store
 	wg.Add(1)
-	if _, err := store.Write([]byte("Snapshot Testing")); err != nil {
+	if _, err := store.Write([]byte("Snapshot Testing"), 0); err != nil {
 		t.Error(err)
 	}
 
@@ -92,7 +92,7 @@ func TestSnapshotUpdate(t *testing.T) {
 		input := make([]byte, 8)
 		input[i] = 1
 
-		if _, err := store.Write(input); err != nil {
+		if _, err := store.Write(input, 0); err != nil {
 			t.Error(err)
 		}
 	}
@@ -152,7 +152,7 @@ func TestSnapshotUpdateReopen(t *testing.T) {
 		input := make([]byte, 8)
 		input[i] = 1
 
-		if _, err := store.Write(input); err != nil {
+		if _, err := store.Write(input, 0); err != nil {
 			t.Error(err)
 		}
 	}
@@ -225,7 +225,7 @@ func TestSnapshotDelete(t *testing.T) {
 
 	// Write data to store
 	wg.Add(1)
-	if _, err := store.Write([]byte("Snapshot Testing")); err != nil {
+	if _, err := store.Write([]byte("Snapshot Testing"), 0); err != nil {
 		t.Error(err)
 	}
 
@@ -272,7 +272,7 @@ func TestSnapshotViewFetch(t *testing.T) {
 			end := base + uint64(quotaPerPipeline)
 			for i := base; i < end; i++ {
 				data := Uint64ToBytes(i + 1)
-				if _, err := store.Write(data); err != nil {
+				if _, err := store.Write(data, 0); err != nil {
 					t.Error(err)
 				}
 			}
@@ -370,7 +370,7 @@ func TestSnapshotRecovery(t *testing.T) {
 	wg.Add(totalCount)
 	for i := 0; i < totalCount; i++ {
 		data := Uint64ToBytes(uint64(i + 1))
-		if _, err := store.Write(data); err != nil {
+		if _, err := store.Write(data, 0); err != nil {
 			t.Error(err)
 		}
 	}

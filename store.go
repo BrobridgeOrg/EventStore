@@ -29,6 +29,7 @@ var (
 )
 
 var (
+	StatePathEventRev        = bytes.Join([][]byte{StateClassStore, StateGroupEvent, []byte("rev")}, []byte("."))
 	StatePathEventLastSeq    = bytes.Join([][]byte{StateClassStore, StateGroupEvent, []byte("lastSeq")}, []byte("."))
 	StatePathEventCount      = bytes.Join([][]byte{StateClassStore, StateGroupEvent, []byte("count")}, []byte("."))
 	StatePathSnapshotLastSeq = bytes.Join([][]byte{StateClassStore, StateGroupSnapshot, []byte("lastSeq")}, []byte("."))
@@ -36,10 +37,15 @@ var (
 )
 
 type StoreState struct {
+	rev             Counter
 	count           Counter
 	lastSeq         Counter
 	snapshotCount   Counter
 	snapshotLastSeq uint64
+}
+
+func (ss *StoreState) Rev() uint64 {
+	return ss.rev.Count()
 }
 
 func (ss *StoreState) Count() uint64 {
@@ -91,6 +97,22 @@ func (ss *StoreState) loadSnapshotLastSeq(s *Store) error {
 	return nil
 }
 
+func (ss *StoreState) loadRev(s *Store) error {
+
+	r, err := s.GetStateUint64(StateClassStore, StateGroupEvent, []byte("rev"))
+	if err != nil {
+		if err != ErrStateEntryNotFound {
+			return err
+		}
+
+		r = 0
+	}
+
+	ss.rev.SetCount(r)
+
+	return nil
+}
+
 func (ss *StoreState) loadLastSeq(s *Store) error {
 
 	els, err := s.GetStateUint64(StateClassStore, StateGroupEvent, []byte("lastSeq"))
@@ -129,6 +151,10 @@ func (ss *StoreState) syncSnapshotCount(s *Store, b *pebble.Batch) error {
 
 func (ss *StoreState) syncSnapshotLastSeq(s *Store, b *pebble.Batch) error {
 	return s.SetStateUint64ByPath(b, StatePathSnapshotLastSeq, ss.snapshotLastSeq)
+}
+
+func (ss *StoreState) syncRev(s *Store, b *pebble.Batch) error {
+	return s.SetStateUint64ByPath(b, StatePathEventRev, ss.rev.Count())
 }
 
 func (ss *StoreState) syncLastSeq(s *Store, b *pebble.Batch) error {
@@ -287,7 +313,12 @@ func (store *Store) openDatabase() error {
 
 func (store *Store) loadStates() error {
 
-	err := store.state.loadLastSeq(store)
+	err := store.state.loadRev(store)
+	if err != nil {
+		return err
+	}
+
+	err = store.state.loadLastSeq(store)
 	if err != nil {
 		return err
 	}
@@ -428,7 +459,13 @@ func (store *Store) Delete(seq uint64) error {
 	return nil
 }
 
-func (store *Store) Write(data []byte) (uint64, error) {
+func (store *Store) Write(data []byte, rev uint64) (uint64, error) {
+
+	if rev > 0 {
+		if store.state.Rev() >= rev {
+			return 0, nil
+		}
+	}
 
 	// Getting sequence
 	seq := store.createNewSeq()
@@ -444,6 +481,15 @@ func (store *Store) Write(data []byte) (uint64, error) {
 	err := store.cfEvent.Write(b, key, data)
 	if err != nil {
 		return 0, err
+	}
+
+	if rev > 0 {
+		// update rev to persistent store
+		store.state.rev.SetCount(rev)
+		err = store.state.syncRev(store, b)
+		if err != nil {
+			return 0, err
+		}
 	}
 
 	// sync seq to persistent store

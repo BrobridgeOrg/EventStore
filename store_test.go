@@ -17,7 +17,7 @@ func TestStoreWrite(t *testing.T) {
 	store := createTestStore()
 	value := []byte("test_value")
 
-	seq, err := store.Write(value)
+	seq, err := store.Write(value, 0)
 	if err != nil {
 		t.Error(err)
 	}
@@ -34,6 +34,53 @@ func TestStoreWrite(t *testing.T) {
 	assert.Equal(t, seq, store.State().LastSeq())
 }
 
+func TestStoreWriteWithRev(t *testing.T) {
+
+	createTestEventStore("testing", false)
+	defer closeTestEventStore()
+
+	store := createTestStore()
+
+	for i := 0; i < 10; i++ {
+		if _, err := store.Write([]byte("Benchmark"+strconv.Itoa(i)), uint64(i+1)); err != nil {
+			t.Error(err)
+		}
+	}
+
+	assert.Equal(t, uint64(10), store.State().Count())
+	assert.Equal(t, uint64(10), store.State().LastSeq())
+	assert.Equal(t, uint64(10), store.State().Rev())
+
+	// duplicated rev should be ignored
+	if _, err := store.Write([]byte("Benchmark10"), uint64(10)); err != nil {
+		t.Error(err)
+	}
+
+	assert.Equal(t, uint64(10), store.State().Count())
+	assert.Equal(t, uint64(10), store.State().LastSeq())
+	assert.Equal(t, uint64(10), store.State().Rev())
+}
+
+func TestStoreWriteUnderPressureWithRev(t *testing.T) {
+
+	createTestEventStore("testing", false)
+	defer closeTestEventStore()
+
+	store := createTestStore()
+
+	totalCount := 20000
+
+	for i := 0; i < totalCount; i++ {
+		if _, err := store.Write([]byte("Benchmark"+strconv.Itoa(i)), uint64(i+1)); err != nil {
+			t.Error(err)
+		}
+	}
+
+	assert.Equal(t, uint64(totalCount), store.State().Count())
+	assert.Equal(t, uint64(totalCount), store.State().LastSeq())
+	assert.Equal(t, uint64(totalCount), store.State().Rev())
+}
+
 func TestStoreWriteReopen(t *testing.T) {
 
 	createTestEventStore("testing", false)
@@ -44,7 +91,7 @@ func TestStoreWriteReopen(t *testing.T) {
 
 	assert.Equal(t, uint64(0), store.State().LastSeq())
 
-	seq, err := store.Write(value)
+	seq, err := store.Write(value, 0)
 	if err != nil {
 		t.Error(err)
 	}
@@ -72,7 +119,7 @@ func TestStoreWriteReopen(t *testing.T) {
 	assert.Equal(t, seq, store.State().LastSeq())
 	assert.Equal(t, uint64(1), store.State().Count())
 
-	nseq, err := store.Write(value)
+	nseq, err := store.Write(value, 0)
 	if err != nil {
 		t.Error(err)
 	}
@@ -96,7 +143,7 @@ func TestStoreDelete(t *testing.T) {
 
 	store := createTestStore()
 
-	seq, err := store.Write([]byte("Benchmark"))
+	seq, err := store.Write([]byte("Benchmark"), 0)
 	if err != nil {
 		t.Error(err)
 	}
@@ -117,7 +164,7 @@ func TestStoreFetch(t *testing.T) {
 	totalCount := 5000
 
 	for i := 0; i < totalCount; i++ {
-		if _, err := store.Write([]byte(fmt.Sprintf("%d", i+1))); err != nil {
+		if _, err := store.Write([]byte(fmt.Sprintf("%d", i+1)), 0); err != nil {
 			t.Error(err)
 		}
 	}
@@ -151,7 +198,7 @@ func TestStoreRealtimeFetch(t *testing.T) {
 
 	go func() {
 		for i := 0; i < totalCount; i++ {
-			if _, err := store.Write([]byte(fmt.Sprintf("%d", i+1))); err != nil {
+			if _, err := store.Write([]byte(fmt.Sprintf("%d", i+1)), 0); err != nil {
 				t.Error(err)
 			}
 		}
@@ -192,7 +239,7 @@ func TestStoreFetchWithCount(t *testing.T) {
 	store := createTestStore()
 
 	for i := 0; i < 10; i++ {
-		if _, err := store.Write([]byte("Benchmark" + strconv.Itoa(i))); err != nil {
+		if _, err := store.Write([]byte("Benchmark"+strconv.Itoa(i)), 0); err != nil {
 			t.Error(err)
 		}
 	}
@@ -218,7 +265,7 @@ func TestStoreFetchWithOffset(t *testing.T) {
 	store := createTestStore()
 
 	for i := 0; i < 10; i++ {
-		if _, err := store.Write([]byte("Benchmark" + strconv.Itoa(i))); err != nil {
+		if _, err := store.Write([]byte("Benchmark"+strconv.Itoa(i)), 0); err != nil {
 			t.Error(err)
 		}
 	}
@@ -261,7 +308,7 @@ func TestStoreSubscription(t *testing.T) {
 	wg.Add(1000)
 	go func() {
 		for i := 0; i < 1000; i++ {
-			if _, err := store.Write([]byte("Benchmark" + strconv.Itoa(i))); err != nil {
+			if _, err := store.Write([]byte("Benchmark"+strconv.Itoa(i)), 0); err != nil {
 				t.Error(err)
 			}
 		}
@@ -293,7 +340,7 @@ func TestStoreSubscriptionOffset(t *testing.T) {
 	wg.Add(50)
 	go func() {
 		for i := 1; i <= 50; i++ {
-			if _, err := store.Write([]byte(fmt.Sprintf("%d", i))); err != nil {
+			if _, err := store.Write([]byte(fmt.Sprintf("%d", i)), 0); err != nil {
 				t.Error(err)
 			}
 		}
@@ -324,7 +371,7 @@ func TestStoreSubscriptionOffset(t *testing.T) {
 	// Write 50 records againg
 	wg.Add(50)
 	for i := 51; i <= 100; i++ {
-		if _, err := store.Write([]byte(fmt.Sprintf("%d", i))); err != nil {
+		if _, err := store.Write([]byte(fmt.Sprintf("%d", i)), 0); err != nil {
 			t.Error(err)
 		}
 	}
@@ -381,7 +428,7 @@ func TestStoreSubscriptionWithDurableName(t *testing.T) {
 	wg.Add(msgCount - 30)
 	go func() {
 		for i := 0; i < msgCount-30; i++ {
-			if _, err := store.Write([]byte(fmt.Sprintf("%d", i+1))); err != nil {
+			if _, err := store.Write([]byte(fmt.Sprintf("%d", i+1)), 0); err != nil {
 				t.Error(err)
 			}
 		}
@@ -407,7 +454,7 @@ func TestStoreSubscriptionWithDurableName(t *testing.T) {
 	// Write more messages
 	wg.Add(30)
 	for i := 0; i < 30; i++ {
-		if _, err := store.Write([]byte(fmt.Sprintf("%d", i+1))); err != nil {
+		if _, err := store.Write([]byte(fmt.Sprintf("%d", i+1)), 0); err != nil {
 			t.Error(err)
 		}
 	}
